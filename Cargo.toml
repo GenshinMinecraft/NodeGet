@@ -15,3 +15,6 @@ fastest = { inherits = "dev", opt-level = 0, debug = 0, debug-assertions = true,
 minimal = { inherits = "release", opt-level = "z", lto = true, codegen-units = 1, panic = "abort", debug = false, strip = true, debug-assertions = false, overflow-checks = false }
 
 [dependencies]
+tokio = { version = "1.48.0", default-features = false, features = ["macros", "rt", "rt-multi-thread", "sync", "time"] }
+sysinfo = { version = "0.37.2", default-features = false, features = ["multithread", "windows", "disk", "network", "system"] }
+parking_lot = "0.12.5"
