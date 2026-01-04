@@ -93,7 +93,6 @@ impl StaticDataFromSystem {
             .get_or_init(|| async { Mutex::new(StaticDataFromSystem::new().await) })
             .await;
 
-        
         data_mutex.lock()
     }
 }
