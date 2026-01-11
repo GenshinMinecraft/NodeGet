@@ -12,11 +12,15 @@
 
 use nodeget_lib::monitoring::data_structure::{DynamicMonitoringData, StaticMonitoringData};
 use monitoring::impls::Monitor;
+use crate::tasks::ping::icmp::ping_v4_target;
 
 mod monitoring;
+mod tasks;
 
 #[tokio::main]
 async fn main() {
     println!("{}", miniserde::json::to_string(&StaticMonitoringData::refresh_and_get().await));
     println!("{}", miniserde::json::to_string(&DynamicMonitoringData::refresh_and_get().await));
+    
+    println!("{}", ping_v4_target("1.1.1.1".parse().unwrap()).await.unwrap().as_millis_f64())
 }
