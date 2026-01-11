@@ -1,13 +1,13 @@
+use nvml_wrapper::Nvml;
 use parking_lot::Mutex;
 use std::time::Duration;
-use nvml_wrapper::Nvml;
 use sysinfo::{CpuRefreshKind, DiskRefreshKind, Disks, MemoryRefreshKind, Networks, System};
 use tokio::sync::OnceCell;
 use tokio::time::Instant;
 
+mod gpu;
 pub mod impls;
 mod network_connections;
-mod gpu;
 mod system_impls;
 // System
 

@@ -1,8 +1,8 @@
+use crate::monitoring::get_global_gpu;
 use nodeget_lib::monitoring::data_structure::{DynamicGpuData, StaticGpuData};
 use nvml_wrapper::enum_wrappers::device::{Clock, TemperatureSensor};
 use parking_lot::{Mutex, MutexGuard};
 use tokio::sync::OnceCell;
-use crate::monitoring::get_global_gpu;
 
 #[derive(Debug)]
 pub struct StaticDataFromGpu(pub Vec<StaticGpuData>);
@@ -33,9 +33,7 @@ impl StaticDataFromGpu {
 
     pub async fn get() -> MutexGuard<'static, StaticDataFromGpu> {
         let data_mutex = GLOBAL_STATIC_DATA_FROM_GPU
-            .get_or_init(|| async {
-                Mutex::new(StaticDataFromGpu::new().await)
-            })
+            .get_or_init(|| async { Mutex::new(StaticDataFromGpu::new().await) })
             .await;
 
         data_mutex.lock()
@@ -70,7 +68,11 @@ impl DynamicDataFromGpu {
                     video_clock_mhz: device.clock_info(Clock::Video).ok()?.into(),
                     utilization_gpu: utilization.gpu.try_into().ok()?,
                     utilization_memory: utilization.memory.try_into().ok()?,
-                    temperature: device.temperature(TemperatureSensor::Gpu).ok()?.try_into().ok()?,
+                    temperature: device
+                        .temperature(TemperatureSensor::Gpu)
+                        .ok()?
+                        .try_into()
+                        .ok()?,
                 })
             })
             .collect::<Vec<_>>();
@@ -115,12 +117,10 @@ impl DynamicDataFromGpu {
             }
         }
     }
-    
+
     pub async fn refresh_and_get() -> MutexGuard<'static, DynamicDataFromGpu> {
         let data_mutex = GLOBAL_DYNAMIC_DATA_FROM_GPU
-            .get_or_init(|| async {
-                Mutex::new(DynamicDataFromGpu::new().await)
-            })
+            .get_or_init(|| async { Mutex::new(DynamicDataFromGpu::new().await) })
             .await;
 
         let mut data = data_mutex.lock();

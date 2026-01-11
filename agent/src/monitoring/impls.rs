@@ -3,7 +3,10 @@ use crate::monitoring::network_connections::calc_connections;
 use crate::monitoring::system_impls::{DynamicDataFromSystem, StaticDataFromSystem};
 use crate::monitoring::{refresh_global_disk, refresh_global_network};
 use nodeget_lib::monitoring::data_structure::DiskKind::{Hdd, Ssd, Unknown};
-use nodeget_lib::monitoring::data_structure::{StaticMonitoringData, DynamicMonitoringData, DynamicPerDiskData, DynamicNetworkData, DynamicPerNetworkInterfaceData};
+use nodeget_lib::monitoring::data_structure::{
+    DynamicMonitoringData, DynamicNetworkData, DynamicPerDiskData, DynamicPerNetworkInterfaceData,
+    StaticMonitoringData,
+};
 use sysinfo::DiskKind;
 
 pub trait Monitor {
@@ -14,7 +17,8 @@ pub trait Monitor {
 
 impl Monitor for StaticMonitoringData {
     async fn refresh_and_get() -> Self {
-        let (system_data, gpu_data) = tokio::join!(StaticDataFromSystem::get(), StaticDataFromGpu::get());
+        let (system_data, gpu_data) =
+            tokio::join!(StaticDataFromSystem::get(), StaticDataFromGpu::get());
         StaticMonitoringData {
             cpu: system_data.0.clone(),
             system: system_data.1.clone(),
@@ -44,7 +48,6 @@ impl Monitor for DynamicMonitoringData {
     }
 }
 
-
 // Disk
 
 #[derive(Debug)]
@@ -65,9 +68,7 @@ impl DataFromDisk {
                     kind: match disk.kind() {
                         DiskKind::HDD => Hdd,
                         DiskKind::SSD => Ssd,
-                        DiskKind::Unknown(_) => {
-                            Unknown
-                        }
+                        DiskKind::Unknown(_) => Unknown,
                     },
                     name: disk.name().to_string_lossy().into_owned(),
                     file_system: disk.file_system().to_string_lossy().into_owned(),

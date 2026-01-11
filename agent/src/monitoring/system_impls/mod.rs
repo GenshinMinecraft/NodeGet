@@ -1,12 +1,15 @@
 // System
 
-use nodeget_lib::monitoring::data_structure::{DynamicCPUData, DynamicLoadData, DynamicPerCpuCoreData, DynamicRamData, DynamicSystemData, StaticCPUData, StaticPerCpuCoreData, StaticSystemData};
+use crate::monitoring::refresh_global_system;
+use nodeget_lib::monitoring::data_structure::{
+    DynamicCPUData, DynamicLoadData, DynamicPerCpuCoreData, DynamicRamData, DynamicSystemData,
+    StaticCPUData, StaticPerCpuCoreData, StaticSystemData,
+};
 use parking_lot::{Mutex, MutexGuard};
+use process::count_processes;
 use sysinfo::System;
 use tokio::sync::OnceCell;
-use process::count_processes;
 use virtualization_detect::detect_virtualization;
-use crate::monitoring::refresh_global_system;
 
 pub mod process;
 pub mod virtualization_detect;
