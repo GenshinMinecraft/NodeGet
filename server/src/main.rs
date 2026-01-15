@@ -13,10 +13,10 @@
 use crate::rpc::agent::RpcServer as AgentRpcServer;
 use crate::rpc::nodeget::RpcServer as NodegetRpcServer;
 use jsonrpsee::server::ServerBuilder;
+use migration::{Migrator, MigratorTrait};
 use sea_orm::{Database, DatabaseConnection};
 use std::net::SocketAddr;
 use tokio::sync::OnceCell;
-use migration::{Migrator, MigratorTrait};
 
 mod entity;
 mod rpc;

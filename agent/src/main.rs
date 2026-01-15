@@ -27,11 +27,17 @@ static UUID: OnceLock<String> = OnceLock::new();
 async fn main() {
     UUID.set(uuid::Uuid::new_v4().to_string()).unwrap();
 
-    println!("{}", miniserde::json::to_string(&StaticMonitoringData::refresh_and_get().await));
+    println!(
+        "{}",
+        miniserde::json::to_string(&StaticMonitoringData::refresh_and_get().await)
+    );
 
     println!();
 
-    println!("{}", miniserde::json::to_string(&DynamicMonitoringData::refresh_and_get().await));
+    println!(
+        "{}",
+        miniserde::json::to_string(&DynamicMonitoringData::refresh_and_get().await)
+    );
 
     println!(
         "{}",
