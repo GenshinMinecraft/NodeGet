@@ -2,6 +2,7 @@ use crate::DB;
 use crate::entity::{dynamic_monitoring, static_monitoring};
 use jsonrpsee::core::async_trait;
 use jsonrpsee::proc_macros::rpc;
+use log::{debug, error};
 use nodeget_lib::monitoring::data_structure::{DynamicMonitoringData, StaticMonitoringData};
 use nodeget_lib::utils::error_message::generate_error_message;
 use sea_orm::{ActiveValue, DatabaseConnection, EntityTrait, Set};
@@ -38,12 +39,14 @@ impl RpcServer for AgentRpcImpl {
         let process_logic = async {
             let db = Self::get_db()?;
 
-            let parsed: StaticMonitoringData = serde_json::from_value(data)
-                .map_err(|e| (101, format!("Unable to parse json data: {e}")))?;
+            let parsed: StaticMonitoringData = serde_json::from_value(data).map_err(|e| {
+                error!("Unable to parse json data: {e}");
+                (101, format!("Unable to parse json data: {e}"))
+            })?;
 
             let in_data = static_monitoring::ActiveModel {
                 id: ActiveValue::default(),
-                uuid: Set(parsed.uuid),
+                uuid: Set(parsed.uuid.clone()),
                 timestamp: Set(parsed.time.cast_signed()),
 
                 cpu_data: Self::try_set_json(parsed.cpu).map_err(|e| (101, e))?,
@@ -51,10 +54,17 @@ impl RpcServer for AgentRpcImpl {
                 gpu_data: Self::try_set_json(parsed.gpu).map_err(|e| (101, e))?,
             };
 
+            debug!("Received static data from [{}]", parsed.uuid.clone());
+
             let result = static_monitoring::Entity::insert(in_data)
                 .exec(db)
                 .await
-                .map_err(|e| (103, format!("Database insert error: {e}")))?;
+                .map_err(|e| {
+                    error!("Database insert error: {e}");
+                    (103, format!("Database insert error: {e}"))
+                })?;
+
+            debug!("Inserted static data with id [{}]", result.last_insert_id);
 
             Ok(result.last_insert_id)
         };
@@ -69,12 +79,14 @@ impl RpcServer for AgentRpcImpl {
         let process_logic = async {
             let db = Self::get_db()?;
 
-            let parsed: DynamicMonitoringData = serde_json::from_value(data)
-                .map_err(|e| (101, format!("Unable to parse json data: {e}")))?;
+            let parsed: DynamicMonitoringData = serde_json::from_value(data).map_err(|e| {
+                error!("Unable to parse json data: {e}");
+                (101, format!("Unable to parse json data: {e}"))
+            })?;
 
             let in_data = dynamic_monitoring::ActiveModel {
                 id: ActiveValue::default(),
-                uuid: Set(parsed.uuid),
+                uuid: Set(parsed.uuid.clone()),
                 timestamp: Set(parsed.time.cast_signed()),
 
                 cpu_data: Self::try_set_json(parsed.cpu).map_err(|e| (101, e))?,
@@ -86,10 +98,17 @@ impl RpcServer for AgentRpcImpl {
                 gpu_data: Self::try_set_json(parsed.gpu).map_err(|e| (101, e))?,
             };
 
+            debug!("Received dynamic data from [{}]", parsed.uuid.clone());
+
             let result = dynamic_monitoring::Entity::insert(in_data)
                 .exec(db)
                 .await
-                .map_err(|e| (103, format!("Database insert error: {e}")))?;
+                .map_err(|e| {
+                    error!("Database insert error: {e}");
+                    (103, format!("Database insert error: {e}"))
+                })?;
+
+            debug!("Inserted dynamic data with id [{}]", result.last_insert_id);
 
             Ok(result.last_insert_id)
         };

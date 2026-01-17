@@ -10,13 +10,14 @@
     dead_code
 )]
 
-use crate::config::AgentConfig;
-use crate::rpc::monitoring_data_report::handle_monitoring_data_report;
+use crate::rpc::monitoring_data_report::{
+    handle_dynamic_monitoring_data_report, handle_static_monitoring_data_report,
+};
 use log::{Level, info};
+use nodeget_lib::config::agent::AgentConfig;
 use std::str::FromStr;
 use std::sync::OnceLock;
 
-mod config;
 mod monitoring;
 mod rpc;
 mod tasks;
@@ -39,7 +40,10 @@ async fn main() {
 
     //////////
 
-    rpc::multi_server::init_connections(AGENT_CONFIG.get().unwrap().server.clone().unwrap()).await;
+    rpc::multi_server::init_connections(AGENT_CONFIG.get().unwrap().server.clone().unwrap());
 
-    handle_monitoring_data_report().await;
+    tokio::join!(
+        handle_static_monitoring_data_report(),
+        handle_dynamic_monitoring_data_report()
+    );
 }

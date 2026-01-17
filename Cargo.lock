@@ -2259,6 +2259,8 @@ dependencies = [
  "machine-uid",
  "serde",
  "serde_json",
+ "tokio",
+ "toml 0.9.11+spec-1.1.0",
  "uuid",
  "vergen-git2",
 ]
@@ -2277,7 +2279,6 @@ dependencies = [
  "serde_json",
  "simple_logger",
  "tokio",
- "toml 0.9.11+spec-1.1.0",
  "uuid",
 ]
 

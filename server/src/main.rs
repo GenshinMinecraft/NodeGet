@@ -10,22 +10,24 @@
     dead_code
 )]
 
+use crate::db_connection::init_db_connection;
 use crate::rpc::agent::RpcServer as AgentRpcServer;
 use crate::rpc::nodeget::RpcServer as NodegetRpcServer;
 use jsonrpsee::server::ServerBuilder;
-use migration::{Migrator, MigratorTrait};
-use sea_orm::{Database, DatabaseConnection};
+use log::{Level, info};
+use nodeget_lib::config::server::ServerConfig;
+use sea_orm::DatabaseConnection;
 use std::net::SocketAddr;
 use std::str::FromStr;
-use log::{info, Level};
+use std::sync::OnceLock;
 use tokio::sync::OnceCell;
-use crate::config::ServerConfig;
 
+mod db_connection;
 mod entity;
 mod rpc;
-mod config;
 
 static DB: OnceCell<DatabaseConnection> = OnceCell::const_new();
+static SERVER_CONFIG: OnceLock<ServerConfig> = OnceLock::new();
 
 #[tokio::main]
 async fn main() {
@@ -39,15 +41,9 @@ async fn main() {
 
     info!("Starting nodeget-server with config: {config:?}");
 
-    let _db = DB
-        .get_or_init(|| async {
-            let db = Database::connect(config.database_url).await.unwrap();
-            println!("Database connected.");
-            Migrator::up(&db, None).await.unwrap();
-            println!("Migrations applied successfully.");
-            db
-        })
-        .await;
+    SERVER_CONFIG.set(config.clone()).unwrap();
+
+    init_db_connection().await;
 
     let server = ServerBuilder::default()
         .build(config.ws_listener.parse::<SocketAddr>().unwrap())

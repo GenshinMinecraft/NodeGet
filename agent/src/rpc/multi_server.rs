@@ -2,14 +2,14 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::config::Server;
 use futures::{SinkExt, StreamExt};
 use log::{debug, error, info, warn};
 use tokio::net::TcpStream;
-use tokio::sync::{broadcast, mpsc, OnceCell, RwLock};
+use tokio::sync::{OnceCell, RwLock, broadcast, mpsc};
 use tokio::time::{sleep, timeout};
 use tokio_tungstenite::tungstenite::Message;
-use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async};
+use nodeget_lib::config::agent::Server;
 
 // 句柄
 pub struct ServerHandle {
@@ -21,7 +21,7 @@ pub struct ServerHandle {
 static CONNECTION_POOL: OnceCell<RwLock<HashMap<String, Arc<ServerHandle>>>> =
     OnceCell::const_new();
 
-pub async fn init_connections(servers: Vec<Server>) {
+pub fn init_connections(servers: Vec<Server>) {
     let mut map = HashMap::new();
 
     for server in servers {
