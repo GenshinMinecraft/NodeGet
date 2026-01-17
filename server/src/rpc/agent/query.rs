@@ -5,11 +5,8 @@ use nodeget_lib::monitoring::query::{
     DynamicDataQuery, DynamicDataQueryField, QueryCondition, StaticDataQuery, StaticDataQueryField,
 };
 use nodeget_lib::utils::error_message::generate_error_message;
-use sea_orm::{
-    ColumnTrait, EntityTrait, ExprTrait, Order, QueryOrder,
-    QuerySelect,
-};
-use sea_orm::{QueryFilter};
+use sea_orm::QueryFilter;
+use sea_orm::{ColumnTrait, EntityTrait, ExprTrait, Order, QueryOrder, QuerySelect};
 use serde_json::{Map, Value, from_value};
 
 pub async fn query_static(_token: String, data: Value) -> Value {

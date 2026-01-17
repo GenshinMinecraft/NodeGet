@@ -4,10 +4,7 @@ mod report;
 use crate::DB;
 use jsonrpsee::core::async_trait;
 use jsonrpsee::proc_macros::rpc;
-use sea_orm::{
-    ActiveValue, DatabaseConnection,
-    Set,
-};
+use sea_orm::{ActiveValue, DatabaseConnection, Set};
 use serde::Serialize;
 use serde_json::{Value, to_value};
 
