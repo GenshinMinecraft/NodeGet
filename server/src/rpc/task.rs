@@ -1,22 +1,20 @@
 use crate::entity::task;
 use crate::rpc::RpcHelper;
-use jsonrpsee::core::{JsonRawValue, SubscriptionResult};
-use jsonrpsee::proc_macros::rpc;
 use jsonrpsee::PendingSubscriptionSink;
 use jsonrpsee::SubscriptionMessage;
+use jsonrpsee::core::{JsonRawValue, SubscriptionResult};
+use jsonrpsee::proc_macros::rpc;
 use log::{debug, error, info};
 use migration::async_trait::async_trait;
 use nodeget_lib::task::TaskEventType;
 use nodeget_lib::task::{TaskEvent, TaskEventResponse};
 use nodeget_lib::utils::error_message::generate_error_message;
 use nodeget_lib::utils::generate_random_string;
-use sea_orm::{
-    ActiveModelTrait, ActiveValue, ColumnTrait, EntityTrait, QueryFilter, Set,
-};
-use serde_json::{json, Value};
+use sea_orm::{ActiveModelTrait, ActiveValue, ColumnTrait, EntityTrait, QueryFilter, Set};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{RwLock, mpsc};
 use uuid::Uuid;
 
 #[rpc(server, namespace = "task")]
@@ -33,11 +31,7 @@ pub trait Rpc {
     ) -> Value;
 
     #[method(name = "upload_task_result")]
-    async fn upload_task_result(
-        &self,
-        token: String,
-        task_response: TaskEventResponse,
-    ) -> Value;
+    async fn upload_task_result(&self, token: String, task_response: TaskEventResponse) -> Value;
 }
 
 pub struct TaskRpcImpl {
@@ -65,23 +59,19 @@ impl RpcServer for TaskRpcImpl {
                 timestamp: Set(None),
                 success: Set(None),
                 error_message: Set(None),
-                task_event_type: Self::try_set_json(task_type.clone())
-                    .map_err(|e| (101, e))?,
+                task_event_type: Self::try_set_json(task_type.clone()).map_err(|e| (101, e))?,
                 task_event_result: Set(None),
             };
 
-            debug!("Received task for [{}]", target_uuid);
+            debug!("Received task for [{target_uuid}]");
 
-            let result = task::Entity::insert(in_data)
-                .exec(db)
-                .await
-                .map_err(|e| {
-                    error!("Database insert error: {e}");
-                    (103, format!("Database insert error: {e}"))
-                })?;
+            let result = task::Entity::insert(in_data).exec(db).await.map_err(|e| {
+                error!("Database insert error: {e}");
+                (103, format!("Database insert error: {e}"))
+            })?;
 
             let task_id = result.last_insert_id;
-            debug!("Inserted task with id [{}]", task_id);
+            debug!("Inserted task with id [{task_id}]");
 
             let task = TaskEvent {
                 task_id: task_id as u64,
@@ -112,11 +102,7 @@ impl RpcServer for TaskRpcImpl {
         }
     }
 
-    async fn upload_task_result(
-        &self,
-        _token: String,
-        task_response: TaskEventResponse,
-    ) -> Value {
+    async fn upload_task_result(&self, _token: String, task_response: TaskEventResponse) -> Value {
         let process_logic = async {
             let db = Self::get_db().map_err(|e| (e.0 as u32, e.1))?;
 
@@ -151,8 +137,8 @@ impl RpcServer for TaskRpcImpl {
 
             let result_json = task_response
                 .task_event_result
-                .map(|res| Self::try_set_json(res)) // Result<ActiveValue, String>
-                .transpose()                        // Result<Option<ActiveValue>, String>
+                .map(Self::try_set_json) // Result<ActiveValue, String>
+                .transpose() // Result<Option<ActiveValue>, String>
                 .map_err(|e| (101, e))?;
 
             active_model.task_event_result = match result_json {
@@ -219,9 +205,7 @@ impl RpcServer for TaskRpcImpl {
             manager_clone
                 .remove_session(&uuid_clone, &reg_id_clone)
                 .await;
-            info!(
-                "Client {uuid_clone} (RegID: {reg_id_clone}) disconnected, logic handled."
-            );
+            info!("Client {uuid_clone} (RegID: {reg_id_clone}) disconnected, logic handled.");
         });
 
         Ok(())
@@ -249,11 +233,10 @@ impl TaskManager {
     pub async fn remove_session(&self, uuid: &Uuid, reg_id: &Uuid) {
         let mut peers = self.peers.write().await;
 
-        if let Some((current_reg_id, _)) = peers.get(uuid) {
-            if current_reg_id == reg_id {
+        if let Some((current_reg_id, _)) = peers.get(uuid)
+            && current_reg_id == reg_id {
                 peers.remove(uuid);
             }
-        }
     }
 
     pub async fn send_event(&self, uuid: Uuid, event: TaskEvent) -> Result<(), (u32, String)> {

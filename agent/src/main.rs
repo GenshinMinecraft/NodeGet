@@ -1,3 +1,4 @@
+#![feature(duration_millis_float)]
 #![warn(clippy::all, clippy::pedantic)]
 #![allow(
     clippy::cast_sign_loss,
@@ -12,6 +13,7 @@
 use crate::rpc::monitoring_data_report::{
     handle_dynamic_monitoring_data_report, handle_static_monitoring_data_report,
 };
+use crate::tasks::handle_task;
 use log::{Level, info};
 use nodeget_lib::config::agent::AgentConfig;
 use nodeget_lib::utils::compare_uuid;
@@ -50,6 +52,10 @@ async fn main() {
 
     tokio::spawn(async {
         handle_dynamic_monitoring_data_report().await;
+    });
+
+    tokio::spawn(async {
+        handle_task().await;
     });
 
     tokio::signal::ctrl_c().await.unwrap();

@@ -3,9 +3,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TaskEventType {
-    Ping(String),                       // 可能为域名，需解析
-    TcpPing(String),                    // 可能为域名，需解析
-    HttpPing(url::Url, String, String), // Url, Method, Body
+    Ping(String),       // 可能为域名，需解析
+    TcpPing(String),    // 可能为域名，需解析
+    HttpPing(url::Url), // Url, Method, Body
 
     WebShell(url::Url), // Websocket URL
     Execute(String),    // 命令执行
