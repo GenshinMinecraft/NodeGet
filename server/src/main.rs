@@ -40,7 +40,7 @@ async fn main() {
 
     simple_logger::init_with_level(Level::from_str(&config.log_level).unwrap()).unwrap();
 
-    compare_uuid(config.server_uuid);
+    let _ = compare_uuid(config.server_uuid);
 
     info!("Starting nodeget-server with config: {config:?}");
 

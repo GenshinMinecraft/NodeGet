@@ -1,4 +1,5 @@
 use crate::entity::{dynamic_monitoring, static_monitoring};
+use crate::rpc::RpcHelper;
 use crate::rpc::agent::AgentRpcImpl;
 use log::error;
 use nodeget_lib::monitoring::query::{

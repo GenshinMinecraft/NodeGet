@@ -1,6 +1,6 @@
+use crate::utils::get_stable_device_uuid;
 use serde::{Deserialize, Deserializer};
 use uuid::Uuid;
-use crate::utils::get_stable_device_uuid;
 
 #[cfg(feature = "for-server")]
 pub mod server;

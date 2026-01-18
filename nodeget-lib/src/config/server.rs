@@ -1,6 +1,6 @@
+use crate::config::deserialize_uuid_or_auto;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use crate::config::deserialize_uuid_or_auto;
 use tokio::fs;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
