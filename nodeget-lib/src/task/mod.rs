@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use toml::Value;
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -32,13 +31,13 @@ pub enum TaskEventResult {
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct TaskEventResponse {
-    pub agent_uuid: uuid::Uuid,
     pub task_id: u64,
+    pub agent_uuid: uuid::Uuid,
     pub task_token: String,
     pub timestamp: u64,
 
     pub success: bool,
 
-    pub error_message: Option<Value>,
+    pub error_message: Option<String>,
     pub task_event_result: Option<TaskEventResult>,
 }

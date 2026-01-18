@@ -6,11 +6,14 @@ use jsonrpsee::core::{JsonRawValue, SubscriptionResult};
 use jsonrpsee::proc_macros::rpc;
 use log::{debug, error, info};
 use migration::async_trait::async_trait;
-use nodeget_lib::task::TaskEvent;
+use nodeget_lib::task::{TaskEvent, TaskEventResponse};
 use nodeget_lib::task::TaskEventType;
 use nodeget_lib::utils::error_message::generate_error_message;
 use nodeget_lib::utils::generate_random_string;
-use sea_orm::{ActiveValue, EntityTrait, Set};
+use sea_orm::{ActiveModelTrait, ActiveValue, EntityTrait, Set};
+use sea_orm::{
+    ColumnTrait, QueryFilter,
+};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -28,6 +31,13 @@ pub trait Rpc {
         token: String,
         target_uuid: Uuid,
         task_type: TaskEventType,
+    ) -> Value;
+
+    #[method(name = "upload_task_result")]
+    async fn upload_task_result(
+        &self,
+        token: String,
+        task_response: TaskEventResponse,
     ) -> Value;
 }
 
@@ -53,7 +63,7 @@ impl RpcServer for TaskRpcImpl {
             let in_data = task::ActiveModel {
                 id: ActiveValue::default(),
                 uuid: Set(target_uuid),
-                token: Set(token),
+                token: Set(token.clone()),
 
                 timestamp: Set(None),
                 success: Set(None),
@@ -73,7 +83,7 @@ impl RpcServer for TaskRpcImpl {
 
             let task = TaskEvent {
                 task_id: result.last_insert_id as u64,
-                task_token: generate_random_string(10),
+                task_token: token,
                 task_event_type: task_type,
             };
 
@@ -99,6 +109,62 @@ impl RpcServer for TaskRpcImpl {
 
         match process_logic.await {
             Ok(new_id) => json!({ "id": new_id }),
+            Err((code, msg)) => generate_error_message(code, &msg),
+        }
+    }
+
+    async fn upload_task_result(
+        &self,
+        _token: String,
+        task_response: TaskEventResponse,
+    ) -> Value {
+        let process_logic = async {
+            let db = Self::get_db().map_err(|e| (e.0 as u32, e.1))?;
+
+            // ✅ 修复 2: 引入 Trait 后，这里的 filter 和 eq 就能正常工作了
+            let task_model = task::Entity::find_by_id(task_response.task_id as i64)
+                .filter(task::Column::Uuid.eq(task_response.agent_uuid))
+                .filter(task::Column::Token.eq(task_response.task_token))
+                .one(db)
+                .await
+                .map_err(|e| {
+                    error!("Database query error: {e}");
+                    (103, format!("Database query error: {e}"))
+                })?
+                .ok_or_else(|| {
+                    (
+                        105,
+                        "Task validation failed: Invalid ID, UUID, or Token".to_string(),
+                    )
+                })?;
+
+            let mut active_model: task::ActiveModel = task_model.into();
+
+            active_model.timestamp = Set(Some(task_response.timestamp as i64));
+            active_model.success = Set(Some(task_response.success));
+
+            active_model.error_message = Set(task_response.error_message);
+
+            active_model.task_event_result = match task_response.task_event_result {
+                None => Set(None),
+                Some(res) => ActiveValue::from(Self::try_set_json(res).map_err(|e| (101, e))?),
+            };
+
+            active_model.update(db).await.map_err(|e| {
+                error!("Database update error: {e}");
+                (103, format!("Database update error: {e}"))
+            })?;
+
+            debug!(
+                "Task [{}] result uploaded successfully",
+                task_response.task_id
+            );
+
+            Ok(true)
+        };
+
+        match process_logic.await {
+            Ok(_) => json!({ "id": task_response.task_id }),
             Err((code, msg)) => generate_error_message(code, &msg),
         }
     }
@@ -183,7 +249,7 @@ impl TaskManager {
                 .await
                 .map_err(|_| (104, "Error sending event".to_string()))
         } else {
-            Err((103, "Uuid not found".to_string()))
+            Err((106, "Uuid not found".to_string()))
         }
     }
 }
