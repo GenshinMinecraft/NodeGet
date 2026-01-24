@@ -13,6 +13,7 @@ use sea_orm::{ColumnTrait, EntityTrait, Order, QueryFilter, QueryOrder, QuerySel
 use serde_json::{Map, Value};
 use serde_json::value::RawValue;
 use migration::ExprTrait;
+use nodeget_lib::utils::rename_key;
 
 pub async fn query_static(_token: String, static_data_query: StaticDataQuery) -> RpcResult<Box<RawValue>> {
     let process_logic = async {
@@ -260,16 +261,9 @@ pub async fn query_dynamic(_token: String, dynamic_data_query: DynamicDataQuery)
         })?;
 
         Ok(raw_value)
-        // --- 核心优化结束 ---
     };
 
     Ok(process_logic
         .await
         .unwrap_or_else(|(code, msg)| error_to_raw(code, &msg)))
-}
-
-fn rename_key(map: &mut Map<String, Value>, old_key: &str, new_key: &str) {
-    if let Some(v) = map.remove(old_key) {
-        map.insert(new_key.to_string(), v);
-    }
 }

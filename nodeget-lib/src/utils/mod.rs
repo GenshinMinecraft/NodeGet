@@ -2,6 +2,7 @@ use log::{error, warn};
 use rand::distr::Alphanumeric;
 use rand::{Rng, rng};
 use serde::Serialize;
+use serde_json::{Map, Value};
 use serde_json::value::RawValue;
 
 pub mod error_message;
@@ -71,4 +72,10 @@ pub fn to_raw_json<T: Serialize>(val: T) -> Box<RawValue> {
         }))
         .unwrap()
     })
+}
+
+pub fn rename_key(map: &mut Map<String, Value>, old_key: &str, new_key: &str) {
+    if let Some(v) = map.remove(old_key) {
+        map.insert(new_key.to_string(), v);
+    }
 }
