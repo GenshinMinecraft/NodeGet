@@ -1927,6 +1927,7 @@ dependencies = [
 name = "nodeget-server"
 version = "0.0.1"
 dependencies = [
+ "futures",
  "jsonrpsee",
  "log",
  "migration",

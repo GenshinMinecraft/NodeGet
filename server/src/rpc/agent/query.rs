@@ -4,31 +4,42 @@ use jsonrpsee::core::RpcResult;
 use crate::entity::{dynamic_monitoring, static_monitoring};
 use crate::rpc::RpcHelper;
 use crate::rpc::agent::AgentRpcImpl;
+use futures::StreamExt;
 use log::error;
 use nodeget_lib::monitoring::query::{
-    DynamicDataQuery, DynamicDataQueryField, DynamicResponseItem, QueryCondition, StaticDataQuery,
-    StaticDataQueryField, StaticResponseItem,
+    DynamicDataQuery, DynamicDataQueryField, QueryCondition, StaticDataQuery,
+    StaticDataQueryField,
 };
 use nodeget_lib::utils::error_message::{error_to_raw};
 use nodeget_lib::utils::to_raw_json;
-use sea_orm::QueryFilter;
-use sea_orm::{ColumnTrait, EntityTrait, ExprTrait, Order, QueryOrder, QuerySelect};
+use sea_orm::{ColumnTrait, EntityTrait, Order, QueryFilter, QueryOrder, QuerySelect};
+use serde_json::{Map, Value};
 use serde_json::value::RawValue;
+use migration::ExprTrait;
 
 pub async fn query_static(_token: String, static_data_query: StaticDataQuery) -> RpcResult<Box<RawValue>> {
     let process_logic = async {
         let db = AgentRpcImpl::get_db()?;
 
-        // 查询构建器
-        let mut query = static_monitoring::Entity::find();
+        // Select Only
+        let mut query = static_monitoring::Entity::find().select_only();
 
-        // 最新数据 (仅一个)
+        query = query
+            .column(static_monitoring::Column::Uuid)
+            .column(static_monitoring::Column::Timestamp);
+
+        for field in &static_data_query.fields {
+            match field {
+                StaticDataQueryField::Cpu => query = query.column(static_monitoring::Column::CpuData),
+                StaticDataQueryField::System => query = query.column(static_monitoring::Column::SystemData),
+                StaticDataQueryField::Gpu => query = query.column(static_monitoring::Column::GpuData),
+            }
+        }
+
+        // Build Query
         let mut is_last = false;
-
-        // 查询数量限制
         let mut limit_count: Option<u64> = None;
 
-        // 应用过滤条件 (QueryCondition)
         for cond in static_data_query.condition {
             match cond {
                 QueryCondition::Uuid(uuid) => {
@@ -64,7 +75,6 @@ pub async fn query_static(_token: String, static_data_query: StaticDataQuery) ->
             query = query.order_by(static_monitoring::Column::Timestamp, Order::Asc);
         }
 
-        // 时间倒序第一条
         if is_last {
             query = query
                 .order_by(static_monitoring::Column::Timestamp, Order::Desc)
@@ -73,34 +83,38 @@ pub async fn query_static(_token: String, static_data_query: StaticDataQuery) ->
             query = query.order_by(static_monitoring::Column::Timestamp, Order::Asc);
         }
 
-        // 查询
-        let models = query.all(db).await.map_err(|e| {
+        // 使用 Stream
+        let mut stream = query.into_json().stream(db).await.map_err(|e| {
             error!("Database query error: {e}");
             (103, format!("Database query error: {e}"))
         })?;
 
-        let result_list: Vec<StaticResponseItem> = models
-            .into_iter()
-            .map(|model| {
-                let mut item = StaticResponseItem {
-                    uuid: model.uuid.to_string(),
-                    timestamp: model.timestamp,
-                    cpu: None,
-                    system: None,
-                    gpu: None,
-                };
-                for field in &static_data_query.fields {
-                    match field {
-                        StaticDataQueryField::Cpu => item.cpu = Some(model.cpu_data.clone()),
-                        StaticDataQueryField::System => {
-                            item.system = Some(model.system_data.clone());
-                        }
-                        StaticDataQueryField::Gpu => item.gpu = Some(model.gpu_data.clone()),
+        // 预分配内存
+        let mut result_list: Vec<Value> = if let Some(l) = limit_count {
+            Vec::with_capacity(l as usize)
+        } else {
+            Vec::new()
+        };
+
+        // 流式迭代
+        while let Some(item_res) = stream.next().await {
+            match item_res {
+                Ok(mut v) => {
+                    // 原地修改 Key
+                    if let Some(obj) = v.as_object_mut() {
+                        rename_key(obj, "cpu_data", "cpu");
+                        rename_key(obj, "system_data", "system");
+                        rename_key(obj, "gpu_data", "gpu");
                     }
+                    result_list.push(v);
+                },
+                Err(e) => {
+                    error!("Stream read error: {e}");
+                    return Err((103, format!("Stream read error: {e}")));
                 }
-                item
-            })
-            .collect();
+            }
+        }
+
         Ok(to_raw_json(result_list))
     };
 
@@ -113,11 +127,25 @@ pub async fn query_dynamic(_token: String, dynamic_data_query: DynamicDataQuery)
     let process_logic = async {
         let db = AgentRpcImpl::get_db()?;
 
-        let mut query = dynamic_monitoring::Entity::find();
+        let mut query = dynamic_monitoring::Entity::find().select_only();
+
+        query = query
+            .column(dynamic_monitoring::Column::Uuid)
+            .column(dynamic_monitoring::Column::Timestamp);
+
+        for field in &dynamic_data_query.fields {
+            match field {
+                DynamicDataQueryField::Cpu => query = query.column(dynamic_monitoring::Column::CpuData),
+                DynamicDataQueryField::Ram => query = query.column(dynamic_monitoring::Column::RamData),
+                DynamicDataQueryField::Load => query = query.column(dynamic_monitoring::Column::LoadData),
+                DynamicDataQueryField::System => query = query.column(dynamic_monitoring::Column::SystemData),
+                DynamicDataQueryField::Disk => query = query.column(dynamic_monitoring::Column::DiskData),
+                DynamicDataQueryField::Network => query = query.column(dynamic_monitoring::Column::NetworkData),
+                DynamicDataQueryField::Gpu => query = query.column(dynamic_monitoring::Column::GpuData),
+            }
+        }
 
         let mut is_last = false;
-
-        // 查询数量限制
         let mut limit_count: Option<u64> = None;
 
         for cond in dynamic_data_query.condition {
@@ -156,56 +184,56 @@ pub async fn query_dynamic(_token: String, dynamic_data_query: DynamicDataQuery)
         }
 
         if is_last {
-            // 取最新的一条
             query = query
                 .order_by(dynamic_monitoring::Column::Timestamp, Order::Desc)
                 .limit(1);
         } else {
-            // 默认按时间正序
             query = query.order_by(dynamic_monitoring::Column::Timestamp, Order::Asc);
         }
 
-        let models = query.all(db).await.map_err(|e| {
+        let mut stream = query.into_json().stream(db).await.map_err(|e| {
             error!("Database query error: {e}");
             (103, format!("Database query error: {e}"))
         })?;
 
-        let result_list: Vec<DynamicResponseItem> = models
-            .into_iter()
-            .map(|model| {
-                let mut item = DynamicResponseItem {
-                    uuid: model.uuid.to_string(),
-                    timestamp: model.timestamp,
-                    cpu: None,
-                    ram: None,
-                    load: None,
-                    system: None,
-                    disk: None,
-                    network: None,
-                    gpu: None,
-                };
-                for field in &dynamic_data_query.fields {
-                    match field {
-                        DynamicDataQueryField::Cpu => item.cpu = Some(model.cpu_data.clone()),
-                        DynamicDataQueryField::Ram => item.ram = Some(model.ram_data.clone()),
-                        DynamicDataQueryField::Load => item.load = Some(model.load_data.clone()),
-                        DynamicDataQueryField::System => {
-                            item.system = Some(model.system_data.clone());
-                        }
-                        DynamicDataQueryField::Disk => item.disk = Some(model.disk_data.clone()),
-                        DynamicDataQueryField::Network => {
-                            item.network = Some(model.network_data.clone());
-                        }
-                        DynamicDataQueryField::Gpu => item.gpu = Some(model.gpu_data.clone()),
+        let mut result_list: Vec<Value> = if let Some(l) = limit_count {
+            Vec::with_capacity(l as usize)
+        } else {
+            Vec::new()
+        };
+
+        while let Some(item_res) = stream.next().await {
+            match item_res {
+                Ok(mut v) => {
+                    // 原地修改 Key
+                    if let Some(obj) = v.as_object_mut() {
+                        rename_key(obj, "cpu_data", "cpu");
+                        rename_key(obj, "ram_data", "ram");
+                        rename_key(obj, "load_data", "load");
+                        rename_key(obj, "system_data", "system");
+                        rename_key(obj, "disk_data", "disk");
+                        rename_key(obj, "network_data", "network");
+                        rename_key(obj, "gpu_data", "gpu");
                     }
+                    result_list.push(v);
+                },
+                Err(e) => {
+                    error!("Stream read error: {e}");
+                    return Err((103, format!("Stream read error: {e}")));
                 }
-                item
-            })
-            .collect();
+            }
+        }
+
         Ok(to_raw_json(result_list))
     };
 
     Ok(process_logic
         .await
         .unwrap_or_else(|(code, msg)| error_to_raw(code, &msg)))
+}
+
+fn rename_key(map: &mut Map<String, Value>, old_key: &str, new_key: &str) {
+    if let Some(v) = map.remove(old_key) {
+        map.insert(new_key.to_string(), v);
+    }
 }
