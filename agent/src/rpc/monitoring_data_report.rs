@@ -5,12 +5,18 @@ use crate::rpc::wrap_json_into_rpc_with_id_1;
 use log::{error, trace};
 use nodeget_lib::monitoring::data_structure::{DynamicMonitoringData, StaticMonitoringData};
 use std::time::Duration;
+use tokio::time::{interval, MissedTickBehavior}; // 引入 interval 相关组件
 use tokio_tungstenite::tungstenite::{Message, Utf8Bytes};
 
 pub async fn handle_static_monitoring_data_report() {
     let agent_config = AGENT_CONFIG.get().expect("Agent config not initialized");
 
+    let mut ticker = interval(Duration::from_mins(5));
+    ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
     loop {
+        ticker.tick().await;
+
         let static_monitoring_data = StaticMonitoringData::refresh_and_get().await;
         let static_monitoring_data_value = serde_json::to_value(static_monitoring_data).unwrap();
 
@@ -29,21 +35,25 @@ pub async fn handle_static_monitoring_data_report() {
                         ],
                     ))),
                 )
-                .await
+                    .await
                 {
                     error!("{e}");
                 }
             });
         }
-
-        tokio::time::sleep(Duration::from_mins(5)).await;
     }
 }
 
 pub async fn handle_dynamic_monitoring_data_report() {
     let agent_config = AGENT_CONFIG.get().expect("Agent config not initialized");
+    let interval_ms = agent_config.monitoring_report_interval_ms.unwrap_or(1000);
+
+    let mut ticker = interval(Duration::from_millis(interval_ms));
+    ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
     loop {
+        ticker.tick().await;
+
         let dynamic_monitoring_data = DynamicMonitoringData::refresh_and_get().await;
         let dynamic_monitoring_data_value = serde_json::to_value(dynamic_monitoring_data).unwrap();
 
@@ -62,16 +72,11 @@ pub async fn handle_dynamic_monitoring_data_report() {
                         ],
                     ))),
                 )
-                .await
+                    .await
                 {
                     error!("{e}");
                 }
             });
         }
-
-        tokio::time::sleep(Duration::from_millis(
-            agent_config.monitoring_report_interval_ms.unwrap_or(1000),
-        ))
-        .await;
     }
 }
