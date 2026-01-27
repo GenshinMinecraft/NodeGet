@@ -24,7 +24,7 @@ impl MigrationTrait for Migration {
                     .col(
                         ColumnDef::new(TaskInDatabase::Timestamp)
                             .big_integer()
-                            .null(),
+                            .null(), // 任务创建时为 Null，完成后填充
                     )
                     .col(
                         ColumnDef::new(TaskInDatabase::Success)
@@ -47,6 +47,15 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
+        manager.create_index(
+            Index::create()
+                .name("idx-task-uuid-timestamp")
+                .table(TaskInDatabase::Table)
+                .col(TaskInDatabase::Uuid)
+                .col(TaskInDatabase::Timestamp)
+                .to_owned(),
+        ).await?;
+
         match manager.get_database_backend() {
             DbBackend::Postgres => {
                 let db = manager.get_connection();
@@ -55,12 +64,10 @@ impl MigrationTrait for Migration {
                         ALTER COLUMN task_event_result SET COMPRESSION lz4,
                         ALTER COLUMN task_event_type SET COMPRESSION lz4;",
                 )
-                .await?;
+                    .await?;
             }
-            DbBackend::Sqlite => {} // todo!()
-            _ => {
-                todo!()
-            }
+            DbBackend::Sqlite => {}
+            _ => {}
         }
 
         Ok(())
