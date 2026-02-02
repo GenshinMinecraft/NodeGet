@@ -1,11 +1,10 @@
 use crate::AGENT_CONFIG;
 use crate::monitoring::impls::Monitor;
-use crate::rpc::multi_server::{send_to, subscribe_to};
-use crate::rpc::{JsonRpcErrorMessage, wrap_json_into_rpc_with_id_1};
-use log::{error, trace, warn};
+use crate::rpc::multi_server::send_to;
+use crate::rpc::wrap_json_into_rpc_with_id_1;
+use log::{error, trace};
 use nodeget_lib::monitoring::data_structure::{DynamicMonitoringData, StaticMonitoringData};
 use std::time::Duration;
-use tokio::time;
 use tokio::time::{MissedTickBehavior, interval};
 use tokio_tungstenite::tungstenite::{Message, Utf8Bytes};
 

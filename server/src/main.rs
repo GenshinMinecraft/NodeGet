@@ -87,11 +87,9 @@ async fn main() {
     // Show Super Token
     {
         let token = match generate_super_token().await {
-            Ok(token) => {
-                token
-            }
+            Ok(token) => token,
             Err(e) => {
-                panic!("Failed to generate super token: {}", e);
+                panic!("Failed to generate super token: {e}");
             }
         };
 

@@ -1,9 +1,12 @@
 use crate::entity::task;
 use crate::rpc::RpcHelper;
 use crate::rpc::task::TaskRpcImpl;
+use crate::token::get::check_token_limit;
+use crate::token::parse_token_and_auth;
 use futures::StreamExt;
 use jsonrpsee::core::RpcResult;
 use log::error;
+use nodeget_lib::permission::data_structure::{Permission, Scope, Task};
 use nodeget_lib::task::query::{TaskDataQuery, TaskQueryCondition};
 use nodeget_lib::utils::error_message::error_to_raw;
 use nodeget_lib::utils::{rename_key, try_parse_json_field};
@@ -12,16 +15,20 @@ use sea_orm::{
     ColumnTrait, DbBackend, EntityTrait, ExprTrait, Order, QueryFilter, QueryOrder, QuerySelect,
 };
 use serde_json::value::RawValue;
-use nodeget_lib::permission::data_structure::{Permission, Scope, Task};
-use crate::token::get::check_token_limit;
-use crate::token::parse_token_and_auth;
 
 pub async fn query(token: String, task_data_query: TaskDataQuery) -> RpcResult<Box<RawValue>> {
     let process_logic = async {
         // 鉴权
         let (token_arg, username_arg, password_arg) = parse_token_and_auth(&token);
 
-        let all_task_types = ["ping", "tcp_ping", "http_ping", "web_shell", "execute", "ip"];
+        let all_task_types = [
+            "ping",
+            "tcp_ping",
+            "http_ping",
+            "web_shell",
+            "execute",
+            "ip",
+        ];
 
         let mut scopes = Vec::new();
         let mut has_uuid_condition = false;
@@ -61,12 +68,13 @@ pub async fn query(token: String, task_data_query: TaskDataQuery) -> RpcResult<B
             scopes,
             permissions,
         )
-            .await?;
+        .await?;
 
         if !is_allowed {
             return Err((
                 102,
-                "Permission Denied: Insufficient permissions to read requested task types".to_string(),
+                "Permission Denied: Insufficient permissions to read requested task types"
+                    .to_string(),
             ));
         }
         let db = TaskRpcImpl::get_db()?;

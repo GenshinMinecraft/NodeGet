@@ -9,9 +9,9 @@
     dead_code
 )]
 
+use crate::rpc::handle_error_message;
 use crate::rpc::monitoring_data_report::{
-    handle_dynamic_monitoring_data_report,
-    handle_static_monitoring_data_report,
+    handle_dynamic_monitoring_data_report, handle_static_monitoring_data_report,
 };
 use crate::tasks::handle_task;
 use log::{Level, info};
@@ -19,7 +19,6 @@ use nodeget_lib::config::agent::AgentConfig;
 use nodeget_lib::utils::compare_uuid;
 use std::str::FromStr;
 use std::sync::OnceLock;
-use crate::rpc::handle_error_message;
 
 mod monitoring;
 mod rpc;

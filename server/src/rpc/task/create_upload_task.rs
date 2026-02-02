@@ -1,7 +1,10 @@
 use crate::entity::task;
 use crate::rpc::RpcHelper;
 use crate::rpc::task::{TaskManager, TaskRpcImpl};
+use crate::token::get::check_token_limit;
+use crate::token::parse_token_and_auth;
 use log::{debug, error};
+use nodeget_lib::permission::data_structure::{Permission, Scope, Task};
 use nodeget_lib::task::{TaskEvent, TaskEventResponse, TaskEventType};
 use nodeget_lib::utils::error_message::generate_error_message;
 use nodeget_lib::utils::generate_random_string;
@@ -10,9 +13,6 @@ use sea_orm::QueryFilter;
 use sea_orm::{ActiveModelTrait, ActiveValue, EntityTrait, Set};
 use serde_json::{Value, json};
 use uuid::Uuid;
-use nodeget_lib::permission::data_structure::{Permission, Scope, Task};
-use crate::token::get::check_token_limit;
-use crate::token::parse_token_and_auth;
 
 pub async fn create_task(
     manager: &TaskManager,
@@ -41,12 +41,14 @@ pub async fn create_task(
             vec![Scope::AgentUuid(target_uuid)],
             vec![Permission::Task(Task::Create(task_name.to_string()))],
         )
-            .await?;
+        .await?;
 
         if !is_allowed {
             return Err((
                 102,
-                format!("Permission Denied: Missing Task Create ({}) permission for this Agent", task_name),
+                format!(
+                    "Permission Denied: Missing Task Create ({task_name}) permission for this Agent"
+                ),
             ));
         }
 
@@ -93,7 +95,7 @@ pub async fn create_task(
                     });
 
                 error!("Error sending task event: {}", e.1);
-                Err((e.0 as i64, format!("Error sending task event: {}", e.1)))
+                Err((i64::from(e.0), format!("Error sending task event: {}", e.1)))
             }
         }
     };
@@ -125,8 +127,9 @@ pub async fn upload_task_result(token: String, task_response: TaskEventResponse)
                 )
             })?;
 
-        let original_task_type: TaskEventType = serde_json::from_value(task_model.task_event_type.clone())
-            .map_err(|e| (101, format!("Failed to parse original task type: {e}")))?;
+        let original_task_type: TaskEventType =
+            serde_json::from_value(task_model.task_event_type.clone())
+                .map_err(|e| (101, format!("Failed to parse original task type: {e}")))?;
 
         let task_name = match &original_task_type {
             TaskEventType::Ping(_) => "ping",
@@ -146,12 +149,14 @@ pub async fn upload_task_result(token: String, task_response: TaskEventResponse)
             vec![Scope::AgentUuid(task_response.agent_uuid)],
             vec![Permission::Task(Task::Write(task_name.to_string()))],
         )
-            .await?;
+        .await?;
 
         if !is_allowed {
             return Err((
                 102,
-                format!("Permission Denied: Missing Task Write ({}) permission for this Agent", task_name),
+                format!(
+                    "Permission Denied: Missing Task Write ({task_name}) permission for this Agent"
+                ),
             ));
         }
 

@@ -124,7 +124,8 @@ pub enum Task {
 
 这是一个 Agent 能正常调用所有功能的 Limit，它表示:
 
-Agent Uuid 为 `ad..af` 与 `33..5c` 的 Agent，具有上传 StaticMonitoring / DynamicMonitoring 数据、监听 Server 下发 Task、上报目前所有 Task 任务类型 的权限
+Agent Uuid 为 `ad..af` 与 `33..5c` 的 Agent，具有上传 StaticMonitoring / DynamicMonitoring 数据、监听 Server 下发
+Task、上报目前所有 Task 任务类型 的权限
 
 ### 查询 基础
 

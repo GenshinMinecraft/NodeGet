@@ -1,15 +1,15 @@
 pub mod monitoring_data_report;
 pub mod multi_server;
 
-use std::time::Duration;
+use crate::AGENT_CONFIG;
+use crate::rpc::multi_server::subscribe_to;
 use log::{error, warn};
 use nodeget_lib::task::TaskEvent;
 use nodeget_lib::utils::JsonError;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 use tokio::time;
 use tokio_tungstenite::tungstenite::Message;
-use crate::AGENT_CONFIG;
-use crate::rpc::multi_server::subscribe_to;
 
 #[derive(Serialize, Deserialize)]
 struct JsonRpc {
@@ -46,7 +46,6 @@ pub struct JsonRpcTaskResult {
 pub struct JsonRpcErrorMessage {
     pub result: JsonError,
 }
-
 
 pub async fn handle_error_message() {
     time::sleep(Duration::from_secs(1)).await;
