@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct Token {
-    pub version: u8, // 暂为 1
+    pub version: i32, // 暂为 1
     pub token_key: String,
     pub timestamp_from: Option<i64>,
     pub timestamp_to: Option<i64>,

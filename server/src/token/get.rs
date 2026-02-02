@@ -47,7 +47,7 @@ pub async fn get_token(
     let token_limit: Vec<Limit> = serde_json::from_value(token_model.token_limit)
         .map_err(|e| (101, format!("Failed to parse token permissions: {e}")))?;
     Ok(Token {
-        version: token_model.version as u8,
+        version: token_model.version,
         token_key: token_model.token_key,
         timestamp_from: token_model.time_stamp_from,
         timestamp_to: token_model.time_stamp_to,

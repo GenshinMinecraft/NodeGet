@@ -10,7 +10,7 @@ pub struct TokenCreationRequest {
     pub timestamp_from: Option<i64>,
     pub timestamp_to: Option<i64>,
 
-    pub version: Option<u8>,
+    pub version: Option<i32>,
 
     pub token_limit: Vec<Limit>,
 }
