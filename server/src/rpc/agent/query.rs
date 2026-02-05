@@ -12,7 +12,6 @@ use nodeget_lib::permission::data_structure::{
     DynamicMonitoring, Permission, Scope, StaticMonitoring,
 };
 use nodeget_lib::utils::error_message::error_to_raw;
-use nodeget_lib::utils::rename_and_fix_json;
 use sea_orm::{
     ColumnTrait, DatabaseConnection, EntityTrait, ExprTrait, Order, QueryFilter, QueryOrder,
     QuerySelect, SelectModel, Selector,
@@ -20,6 +19,7 @@ use sea_orm::{
 use serde_json::Value;
 use serde_json::value::RawValue;
 use nodeget_lib::permission::token_auth::TokenOrAuth;
+use nodeget_lib::utils::server_json::rename_and_fix_json;
 
 pub async fn query_static(
     token: String,

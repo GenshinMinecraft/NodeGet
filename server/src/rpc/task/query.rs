@@ -8,13 +8,13 @@ use log::error;
 use nodeget_lib::permission::data_structure::{Permission, Scope, Task};
 use nodeget_lib::task::query::{TaskDataQuery, TaskQueryCondition};
 use nodeget_lib::utils::error_message::error_to_raw;
-use nodeget_lib::utils::{rename_key, try_parse_json_field};
 use sea_orm::sea_query::{Alias, BinOper, Expr};
 use sea_orm::{
     ColumnTrait, DbBackend, EntityTrait, ExprTrait, Order, QueryFilter, QueryOrder, QuerySelect,
 };
 use serde_json::value::RawValue;
 use nodeget_lib::permission::token_auth::TokenOrAuth;
+use nodeget_lib::utils::server_json::{rename_key, try_parse_json_field};
 
 pub async fn query(token: String, task_data_query: TaskDataQuery) -> RpcResult<Box<RawValue>> {
     let process_logic = async {

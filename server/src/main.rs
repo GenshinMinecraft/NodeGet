@@ -74,7 +74,8 @@ async fn main() {
     });
 
     // 对比 Uuid，发送警告
-    let _ = nodeget_lib::utils::compare_uuid(config.server_uuid);
+    let _ =
+        nodeget_lib::utils::uuid::compare_uuid(config.server_uuid);
 
     info!("Starting nodeget-server with config: {config:?}");
 
