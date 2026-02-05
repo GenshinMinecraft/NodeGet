@@ -70,6 +70,7 @@ pub enum Permission {
     StaticMonitoring(StaticMonitoring),
     DynamicMonitoring(DynamicMonitoring),
     Task(Task),
+    Metadata(Metadata),
 }
 
 pub enum StaticMonitoring {
@@ -89,6 +90,11 @@ pub enum Task {
     Read(String),
     Write(String), // 上报权限
     Listen, // 监听权限
+}
+
+pub enum Metadata {
+    Read,
+    Write,
 }
 ```
 
