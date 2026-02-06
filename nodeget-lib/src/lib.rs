@@ -24,4 +24,4 @@ pub mod task;
 // 工具函数模块，包含通用的辅助函数
 pub mod metadata;
 pub mod utils;
-mod crontab;
+pub mod crontab;

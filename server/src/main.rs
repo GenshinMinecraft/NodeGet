@@ -37,6 +37,7 @@ mod rpc;
 mod terminal;
 // 令牌模块，处理令牌相关功能
 mod token;
+mod crontab;
 
 // 全局数据库连接单例
 static DB: tokio::sync::OnceCell<sea_orm::DatabaseConnection> = tokio::sync::OnceCell::const_new();
