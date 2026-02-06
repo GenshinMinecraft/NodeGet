@@ -1,16 +1,31 @@
 mod task;
 
-use log::info;
-use std::str::FromStr;
-use chrono::{TimeZone, Utc};
-use cron::Schedule;
-use sea_orm::{ActiveModelTrait, ColumnTrait, DbErr, Set};
-use sea_orm::{EntityTrait, QueryFilter};
-use log::{error, warn};
-use nodeget_lib::crontab::{AgentCronType, Cron, CronType};
 use crate::DB;
 use crate::entity::crontab;
 use crate::entity::crontab::Model;
+use chrono::{TimeZone, Utc};
+use cron::Schedule;
+use log::info;
+use log::{error, warn};
+use nodeget_lib::crontab::{AgentCronType, Cron, CronType};
+use sea_orm::{ActiveModelTrait, ColumnTrait, DbErr, Set};
+use sea_orm::{EntityTrait, QueryFilter};
+use std::str::FromStr;
+use std::time::Duration;
+use tokio::time::sleep;
+
+pub fn init_crontab_worker() {
+    tokio::spawn(async move {
+        info!("Crontab scheduler started.");
+        loop {
+            sleep(Duration::from_secs(1)).await;
+
+            tokio::spawn(async move {
+                process_crontab().await;
+            });
+        }
+    });
+}
 
 async fn process_crontab() {
     let db = match DB.get() {
@@ -18,13 +33,14 @@ async fn process_crontab() {
             error!("DB not initialized");
             return;
         }
-        Some(db) => db
+        Some(db) => db,
     };
 
     let jobs = match crontab::Entity::find()
         .filter(crontab::Column::Enable.eq(true))
         .all(db)
-        .await {
+        .await
+    {
         Ok(jobs) => jobs,
         Err(err) => {
             error!("{}", err);
@@ -32,7 +48,7 @@ async fn process_crontab() {
         }
     };
 
-    let now  = Utc::now();
+    let now = Utc::now();
 
     for job in jobs {
         let schedule = match Schedule::from_str(&job.cron_expression) {
@@ -86,13 +102,11 @@ async fn process_crontab() {
 
 async fn run_job_logic(job: Cron) {
     match job.cron_type {
-        CronType::Agent(uuids, agent_cron) => {
-            match agent_cron {
-                AgentCronType::Task(task_event_type) => {
-                    todo!()
-                }
+        CronType::Agent(uuids, agent_cron) => match agent_cron {
+            AgentCronType::Task(task_event_type) => {
+                task::crontab_task(job.id, job.name, uuids, task_event_type).await;
             }
-        }
+        },
         CronType::Server(_) => {
             todo!()
         }
