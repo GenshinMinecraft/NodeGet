@@ -10,20 +10,20 @@
 )]
 
 use crate::rpc::agent::RpcServer as AgentRpcServer;
+use crate::rpc::crontab::RpcServer as CrontabRpcServer;
+use crate::rpc::metadata::RpcServer as MetadataRpcServer;
 use crate::rpc::nodeget::RpcServer as NodeGetRpcServer;
 use crate::rpc::task::RpcServer as TaskRpcServer;
 use crate::rpc::token::RpcServer as TokenRpcServer;
-use crate::rpc::metadata::RpcServer as MetadataRpcServer;
-use crate::rpc::crontab::RpcServer as CrontabRpcServer;
 use axum::routing::any;
 use log::info;
 use std::str::FromStr;
 use tower::Service;
 
+use crate::crontab::init_crontab_worker;
 use crate::token::super_token::generate_super_token;
 #[cfg(all(not(target_os = "windows"), feature = "jemalloc"))]
 use tikv_jemallocator::Jemalloc;
-use crate::crontab::init_crontab_worker;
 
 #[cfg(all(not(target_os = "windows"), feature = "jemalloc"))]
 #[global_allocator]
