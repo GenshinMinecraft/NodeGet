@@ -26,7 +26,7 @@ pub async fn get_crontabs_by_uuids(uuids: Vec<Uuid>) -> Result<Vec<Cron>, DbErr>
         .into_iter()
         .filter_map(|model| {
             let cron_type: CronType = serde_json::from_str(&model.cron_type.to_string())
-                .unwrap_or_else(|_| {
+                .unwrap_or({
                     CronType::Server(nodeget_lib::crontab::ServerCronType::CleanUpDatabase)
                 });
 
@@ -67,7 +67,7 @@ pub async fn get_all_crontabs() -> Result<Vec<Cron>, DbErr> {
         .into_iter()
         .map(|model| {
             let cron_type: CronType = serde_json::from_str(&model.cron_type.to_string())
-                .unwrap_or_else(|_| {
+                .unwrap_or({
                     CronType::Server(nodeget_lib::crontab::ServerCronType::CleanUpDatabase)
                 });
             Cron {

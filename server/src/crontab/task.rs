@@ -4,10 +4,8 @@ use crate::rpc::task::{TaskManager, TaskRpcImpl};
 use chrono::Utc;
 use log::{debug, error};
 use nodeget_lib::task::{TaskEvent, TaskEventType};
-use nodeget_lib::utils::error_message::generate_error_message;
 use nodeget_lib::utils::generate_random_string;
-use sea_orm::{ActiveValue, DatabaseConnection, EntityTrait, Set};
-use serde_json::json;
+use sea_orm::{ActiveValue, EntityTrait, Set};
 use uuid::Uuid;
 
 pub async fn crontab_task(
@@ -20,8 +18,7 @@ pub async fn crontab_task(
         Ok(db) => db,
         Err(e) => {
             error!(
-                "Critical: Failed to get DB connection for CronJob [{}]: {:?}",
-                cron_name, e
+                "Critical: Failed to get DB connection for CronJob [{cron_name}]: {e:?}"
             );
             return;
         }
@@ -80,15 +77,13 @@ pub async fn crontab_task(
             Ok(new_id) => (
                 true,
                 format!(
-                    "Task dispatched successfully to agent [{}]. Task ID: {}",
-                    uuid, new_id
+                    "Task dispatched successfully to agent [{uuid}]. Task ID: {new_id}"
                 ),
             ),
             Err((code, msg)) => (
                 false,
                 format!(
-                    "Failed to dispatch to agent [{}]. Code: {}, Error: {}",
-                    uuid, code, msg
+                    "Failed to dispatch to agent [{uuid}]. Code: {code}, Error: {msg}"
                 ),
             ),
         };
@@ -104,8 +99,7 @@ pub async fn crontab_task(
 
         if let Err(e) = crontab_result::Entity::insert(crontab_log).exec(db).await {
             error!(
-                "Failed to save CrontabResult for cron [{}]: {}",
-                cron_name, e
+                "Failed to save CrontabResult for cron [{cron_name}]: {e}"
             );
         }
     }

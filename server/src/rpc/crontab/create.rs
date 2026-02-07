@@ -81,36 +81,33 @@ pub async fn create(
 
         let cron_type_json = CrontabRpcImpl::try_set_json(&cron_type).map_err(|e| (101, e))?;
 
-        let res_id = match existing_job {
-            Some(model) => {
-                // 更新现有任务
-                let mut active_model: crontab::ActiveModel = model.into();
-                active_model.cron_expression = Set(cron_expression);
-                active_model.cron_type = cron_type_json;
-                active_model.enable = Set(true);
+        let res_id = if let Some(model) = existing_job {
+            // 更新现有任务
+            let mut active_model: crontab::ActiveModel = model.into();
+            active_model.cron_expression = Set(cron_expression);
+            active_model.cron_type = cron_type_json;
+            active_model.enable = Set(true);
 
-                let updated = active_model
-                    .update(db)
-                    .await
-                    .map_err(|e| (103, e.to_string()))?;
-                updated.id
-            }
-            None => {
-                // 创建新任务
-                let new_model = crontab::ActiveModel {
-                    id: ActiveValue::NotSet,
-                    name: Set(name),
-                    enable: Set(true),
-                    cron_expression: Set(cron_expression),
-                    cron_type: cron_type_json,
-                    last_run_time: Set(None),
-                };
-                let inserted = crontab::Entity::insert(new_model)
-                    .exec(db)
-                    .await
-                    .map_err(|e| (103, e.to_string()))?;
-                inserted.last_insert_id
-            }
+            let updated = active_model
+                .update(db)
+                .await
+                .map_err(|e| (103, e.to_string()))?;
+            updated.id
+        } else {
+            // 创建新任务
+            let new_model = crontab::ActiveModel {
+                id: ActiveValue::NotSet,
+                name: Set(name),
+                enable: Set(true),
+                cron_expression: Set(cron_expression),
+                cron_type: cron_type_json,
+                last_run_time: Set(None),
+            };
+            let inserted = crontab::Entity::insert(new_model)
+                .exec(db)
+                .await
+                .map_err(|e| (103, e.to_string()))?;
+            inserted.last_insert_id
         };
 
         Ok(res_id)

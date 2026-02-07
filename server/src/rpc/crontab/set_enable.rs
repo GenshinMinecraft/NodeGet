@@ -44,11 +44,12 @@ pub async fn set_enable(token: String, name: String, enable: bool) -> Value {
             ));
         }
 
-        match set_crontab_enable_by_name(name, enable)
+        set_crontab_enable_by_name(name, enable)
             .await
-            .map_err(|e| (103, e.to_string()))?
-        {
-            Some(result_state) => {
+            .map_err(|e| (103, e.to_string()))?.map_or_else(|| Ok(json!({
+                "success": false,
+                "message": "Crontab not found"
+            })), |result_state| {
                 let message = if result_state {
                     "Crontab enabled successfully"
                 } else {
@@ -59,12 +60,7 @@ pub async fn set_enable(token: String, name: String, enable: bool) -> Value {
                     "enabled": result_state,
                     "message": message
                 }))
-            }
-            None => Ok(json!({
-                "success": false,
-                "message": "Crontab not found"
-            })),
-        }
+            })
     };
 
     process_logic

@@ -27,19 +27,16 @@ pub async fn delete(token: String, target_token_key: Option<String>) -> Value {
         // 检查是否为超级令牌
         let is_super_token = check_super_token(&token_or_auth)
             .await
-            .map_err(|e| (102, e.to_string()))?;
+            .map_err(|e| (102, e))?;
 
         if is_super_token {
             // SuperToken 可以删除任何令牌
-            let target_key_to_delete = match target_token_key {
-                Some(key) => key,
-                None => {
+            let Some(target_key_to_delete) = target_token_key else {
                     return Err((
                         102,
                         "Target token key is required for SuperToken deletion".to_string(),
                     ));
-                }
-            };
+                };
 
             // 执行删除操作
             let delete_result = token::delete_token_by_key(target_key_to_delete.clone())

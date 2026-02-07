@@ -44,11 +44,12 @@ pub async fn toggle_enable(token: String, name: String) -> Value {
             ));
         }
 
-        match toggle_crontab_enable_by_name(name)
+        toggle_crontab_enable_by_name(name)
             .await
-            .map_err(|e| (103, e.to_string()))?
-        {
-            Some(new_state) => {
+            .map_err(|e| (103, e.to_string()))?.map_or_else(|| Ok(json!({
+                "success": false,
+                "message": "Crontab not found"
+            })), |new_state| {
                 let message = if new_state {
                     "Crontab enabled successfully"
                 } else {
@@ -59,12 +60,7 @@ pub async fn toggle_enable(token: String, name: String) -> Value {
                     "enabled": new_state,
                     "message": message
                 }))
-            }
-            None => Ok(json!({
-                "success": false,
-                "message": "Crontab not found"
-            })),
-        }
+            })
     };
 
     process_logic

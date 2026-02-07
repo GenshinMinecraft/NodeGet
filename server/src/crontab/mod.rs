@@ -15,14 +15,11 @@ use std::time::Duration;
 use tokio::time::sleep;
 
 pub async fn delete_crontab_by_name(name: String) -> Result<bool, sea_orm::DbErr> {
-    let db = match DB.get() {
-        None => {
+    let Some(db) = DB.get() else {
             return Err(sea_orm::DbErr::Conn(sea_orm::RuntimeErr::Internal(
                 "Database not initialized".to_string(),
             )));
-        }
-        Some(db) => db,
-    };
+        };
 
     let result = crontab::Entity::delete_many()
         .filter(crontab::Column::Name.eq(name))
@@ -33,14 +30,11 @@ pub async fn delete_crontab_by_name(name: String) -> Result<bool, sea_orm::DbErr
 }
 
 pub async fn toggle_crontab_enable_by_name(name: String) -> Result<Option<bool>, sea_orm::DbErr> {
-    let db = match DB.get() {
-        None => {
+    let Some(db) = DB.get() else {
             return Err(sea_orm::DbErr::Conn(sea_orm::RuntimeErr::Internal(
                 "Database not initialized".to_string(),
             )));
-        }
-        Some(db) => db,
-    };
+        };
 
     // 首先查找 crontab
     let crontab_option = crontab::Entity::find()
@@ -69,14 +63,11 @@ pub async fn set_crontab_enable_by_name(
     name: String,
     enable: bool,
 ) -> Result<Option<bool>, sea_orm::DbErr> {
-    let db = match DB.get() {
-        None => {
+    let Some(db) = DB.get() else {
             return Err(sea_orm::DbErr::Conn(sea_orm::RuntimeErr::Internal(
                 "Database not initialized".to_string(),
             )));
-        }
-        Some(db) => db,
-    };
+        };
 
     // 首先查找 crontab
     let crontab_option = crontab::Entity::find()
@@ -111,13 +102,10 @@ pub fn init_crontab_worker() {
 }
 
 async fn process_crontab() {
-    let db = match DB.get() {
-        None => {
+    let Some(db) = DB.get() else {
             error!("DB not initialized");
             return;
-        }
-        Some(db) => db,
-    };
+        };
 
     let jobs = match crontab::Entity::find()
         .filter(crontab::Column::Enable.eq(true))
@@ -126,7 +114,7 @@ async fn process_crontab() {
     {
         Ok(jobs) => jobs,
         Err(err) => {
-            error!("{}", err);
+            error!("{err}");
             return;
         }
     };
@@ -143,12 +131,10 @@ async fn process_crontab() {
         };
 
         let last_run = job
-            .last_run_time
-            .map(|t| Utc.timestamp_millis_opt(t).unwrap())
-            .unwrap_or_else(|| now - chrono::Duration::seconds(1));
+            .last_run_time.map_or_else(|| now - chrono::Duration::seconds(1), |t| Utc.timestamp_millis_opt(t).unwrap());
 
-        if let Some(next_run) = schedule.after(&last_run).next() {
-            if next_run <= now {
+        if let Some(next_run) = schedule.after(&last_run).next()
+            && next_run <= now {
                 info!("Triggering cron job: {} ({})", job.name, job.id);
 
                 let mut active_model: crontab::ActiveModel = job.clone().into();
@@ -179,7 +165,6 @@ async fn process_crontab() {
                     run_job_logic(job_parsed).await;
                 });
             }
-        }
     }
 }
 
