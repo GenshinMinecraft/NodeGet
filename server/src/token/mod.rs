@@ -16,13 +16,13 @@ pub mod super_token;
 // 返回 SHA256 哈希值的十六进制字符串表示
 pub fn hash_string(need_hash: &str) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(format!("NODEGET{need_hash}").as_bytes());
+    hasher.update(format!("NODEGET{need_hash}"));
     hex::encode(hasher.finalize())
 }
 
 use crate::DB;
 use crate::entity::token;
-use sea_orm::{ActiveModelTrait, ColumnTrait, DeleteResult, EntityTrait, QueryFilter};
+use sea_orm::{ColumnTrait, DeleteResult, EntityTrait, QueryFilter};
 
 // 删除令牌的方法
 //
