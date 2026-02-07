@@ -1,0 +1,107 @@
+name: nodeget-agent-build
+
+on:
+  workflow_dispatch:
+  merge_group:
+  pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "README.md"
+  push:
+    branches:
+      - main
+      - dev
+    paths-ignore:
+      - "docs/**"
+      - "README.md"
+
+
+jobs:
+  agent-release:
+    name: Build - ${{ matrix.platform.release_for }}
+    strategy:
+      matrix:
+        platform:
+          - release_for: linux_x86_64_musl
+            target: x86_64-unknown-linux-musl
+            binary_name: nodeget-server-linux-x86_64-musl
+          - release_for: linux_x86_64_gnu
+            target: x86_64-unknown-linux-gnu
+            binary_name: nodeget-server-linux-x86_64-gnu
+          - release_for: linux_arm_gnueabi
+            target: arm-unknown-linux-gnueabi
+            binary_name: nodeget-server-linux-arm-gnueabi
+          - release_for: linux_arm_gnueabihf
+            target: arm-unknown-linux-gnueabihf
+            binary_name: nodeget-server-linux-arm-gnueabihf
+          - release_for: linux_aarch64_gnu
+            target: aarch64-unknown-linux-gnu
+            binary_name: nodeget-server-linux-aarch64-gnu
+          - release_for: linux_aarch64_musl
+            target: aarch64-unknown-linux-musl
+            binary_name: nodeget-server-linux-aarch64-musl
+          - release_for: linux_i686_gnu
+            target: i686-unknown-linux-gnu
+            binary_name: nodeget-server-linux-i686-gnu
+          - release_for: linux_i686_musl
+            target: i686-unknown-linux-musl
+            binary_name: nodeget-server-linux-i686-musl
+          - release_for: linux_arm_musleabi
+            target: arm-unknown-linux-musleabi
+            binary_name: nodeget-server-linux-arm-musleabi
+          - release_for: linux_arm_musleabihf
+            target: arm-unknown-linux-musleabihf
+            binary_name: nodeget-server-linux-arm-musleabihf
+          - release_for: linux_armv5te_gnu
+            target: armv5te-unknown-linux-gnueabi
+            binary_name: nodeget-server-linux-armv5te-gnueabi
+          - release_for: linux_armv5te_musl
+            target: armv5te-unknown-linux-musleabi
+            binary_name: nodeget-server-linux-armv5te-musleabi
+          - release_for: linux_armv7_gnueabi
+            target: armv7-unknown-linux-gnueabi
+            binary_name: nodeget-server-linux-armv7-gnueabi
+          - release_for: linux_armv7_gnueabihf
+            target: armv7-unknown-linux-gnueabihf
+            binary_name: nodeget-server-linux-armv7-gnueabihf
+          - release_for: linux_armv7_musleabi
+            target: armv7-unknown-linux-musleabi
+            binary_name: nodeget-server-linux-armv7-musleabi
+          - release_for: linux_armv7_musleabihf
+            target: armv7-unknown-linux-musleabihf
+            binary_name: nodeget-server-linux-armv7-musleabihf
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: ./.github/actions/setup-system
+        with:
+          toolchain: nightly
+          components: clippy
+
+      - name: Install Cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build binary
+        working-directory: ./agent
+        run: cargo clean && cross build --target ${{ matrix.platform.target }} --profile minimal --jobs 32 --locked
+        env:
+          CROSS_NO_WARNINGS: 0
+
+      - name: Compress binary
+        working-directory: ./agent
+        run: upx --brute target/${{ matrix.platform.target }}/minimal/nodeget-server
+
+      - name: Rename binary
+        working-directory: ./agent
+        run: cp target/${{ matrix.platform.target }}/minimal/nodeget-server target/${{ matrix.platform.target }}/minimal/${{ matrix.platform.binary_name }}
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform.target }}
+          path: ./agent/target/${{ matrix.platform.target }}/minimal/${{ matrix.platform.binary_name }}
+          if-no-files-found: error
