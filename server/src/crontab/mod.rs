@@ -1,14 +1,14 @@
 mod task;
+mod server_cron;
 
 use crate::DB;
 use crate::entity::crontab;
-use crate::entity::crontab::Model;
 use chrono::{TimeZone, Utc};
 use cron::Schedule;
 use log::info;
 use log::{error, warn};
-use nodeget_lib::crontab::{AgentCronType, Cron, CronType};
-use sea_orm::{ActiveModelTrait, ColumnTrait, DbErr, Set};
+use nodeget_lib::crontab::{AgentCronType, Cron, CronType, ServerCronType};
+use sea_orm::{ActiveModelTrait, ColumnTrait, Set};
 use sea_orm::{EntityTrait, QueryFilter};
 use std::str::FromStr;
 use std::time::Duration;
@@ -107,8 +107,12 @@ async fn run_job_logic(job: Cron) {
                 task::crontab_task(job.id, job.name, uuids, task_event_type).await;
             }
         },
-        CronType::Server(_) => {
-            todo!()
+        CronType::Server(server_cron) => {
+             match server_cron {
+                 ServerCronType::CleanUpDatabase => {
+                     todo!()
+                 }
+             }
         }
     }
 }
