@@ -14,5 +14,5 @@ outline: deep
 - [Monitoring](./monitoring/index.md)
 - [Task](./task/index.md)
 - [Terminal](./terminal/index.md)
-- [Metadata](./metadata/index.md)
 - [Crontab](./crontab/index.md)
+- [KV](./kv/index.md)
