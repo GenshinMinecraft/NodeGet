@@ -1,12 +1,16 @@
 use crate::kv::create_kv;
+use crate::rpc::kv::auth::check_kv_create_permission;
 use jsonrpsee::core::RpcResult;
 use log::debug;
 use nodeget_lib::error::NodegetError;
 use serde_json::value::RawValue;
 
-pub async fn create(_token: String, name: String) -> RpcResult<Box<RawValue>> {
+pub async fn create(token: String, name: String) -> RpcResult<Box<RawValue>> {
     let process_logic = async {
         debug!("KV RPC: Processing create namespace request for '{name}'");
+
+        // 检查创建命名空间的权限
+        check_kv_create_permission(&token).await?;
 
         let kv_store = create_kv(name).await?;
 

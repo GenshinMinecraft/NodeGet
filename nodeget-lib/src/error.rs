@@ -5,6 +5,9 @@ pub enum NodegetError {
     #[error("Parse error: {0}")]
     ParseError(String),
 
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
+
     #[error("Permission denied: {0}")]
     PermissionDenied(String),
 
@@ -39,6 +42,7 @@ impl NodegetError {
     pub fn error_code(&self) -> i128 {
         match self {
             Self::ParseError(_) => 101,
+            Self::InvalidInput(_) => 108,
             Self::PermissionDenied(_) => 102,
             Self::DatabaseError(_) => 103,
             Self::AgentConnectionError(_) => 104,

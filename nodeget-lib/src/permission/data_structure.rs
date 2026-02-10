@@ -30,7 +30,7 @@ pub struct Limit {
 }
 
 // 作用域枚举，定义权限的作用范围
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Scope {
     // 全局作用域，适用于所有地点

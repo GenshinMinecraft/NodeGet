@@ -129,6 +129,12 @@ pub async fn check_token_limit(
                                 limit_id == req_id
                             } // 具体 Agent ID 匹配
                             (Scope::AgentUuid(_), Scope::Global) => false, // 具体权限不能操作全局范围
+                            (Scope::KvNamespace(limit_ns), Scope::KvNamespace(req_ns)) => {
+                                limit_ns == req_ns
+                            } // KvNamespace 匹配
+                            (Scope::KvNamespace(_), Scope::Global) => false, // 具体权限不能操作全局范围
+                            (Scope::AgentUuid(_), Scope::KvNamespace(_)) => false, // AgentUuid 权限不能操作 KvNamespace
+                            (Scope::KvNamespace(_), Scope::AgentUuid(_)) => false, // KvNamespace 权限不能操作 AgentUuid
                         })
                 };
 

@@ -142,23 +142,6 @@ export const themeZhConfig = {
 					link: '/api/token/delete.md'
 				}]
 			},
-			// Metadata
-			{
-				text: 'Metadata',
-				collapsed: false,
-				items: [{
-					text: '介绍',
-					link: '/api/metadata/index.md'
-				},
-				{
-					text: '写入 Metadata',
-					link: '/api/metadata/write.md'
-				},
-				{
-					text: '获取 Metadata 信息',
-					link: '/api/metadata/get.md'
-				}]
-			},
 			// Crontab
 			{
 				text: 'Crontab',
@@ -186,6 +169,23 @@ export const themeZhConfig = {
 				{
 					text: '设置启用状态',
 					link: '/api/crontab/set_enable.md'
+				}]
+			},
+			// KV
+			{
+				text: 'KV',
+				collapsed: false,
+				items: [{
+					text: '介绍',
+					link: '/api/kv/index.md'
+				},
+				{
+					text: '创建命名空间',
+					link: '/api/kv/create_namespace.md'
+				},
+				{
+					text: '增删改查',
+					link: '/api/kv/crud.md'
 				}]
 			}]
 		}]

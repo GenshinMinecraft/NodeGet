@@ -5,6 +5,7 @@ use jsonrpsee::proc_macros::rpc;
 use serde_json::Value;
 use serde_json::value::RawValue;
 
+mod auth;
 mod create;
 mod delete_key;
 mod get_all_keys;
