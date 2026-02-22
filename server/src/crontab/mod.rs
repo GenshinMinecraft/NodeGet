@@ -1,13 +1,14 @@
 mod server_cron;
 mod task;
 
+use crate::db_connection::clean_up::cleanup_expired_data;
 use crate::DB;
 use crate::entity::crontab;
 use chrono::{TimeZone, Utc};
 use cron::Schedule;
 use log::info;
 use log::{error, warn};
-use nodeget_lib::crontab::{AgentCronType, Cron, CronType};
+use nodeget_lib::crontab::{AgentCronType, Cron, CronType, ServerCronType};
 use sea_orm::{ActiveModelTrait, ColumnTrait, Set};
 use sea_orm::{EntityTrait, QueryFilter};
 use std::str::FromStr;
@@ -166,7 +167,15 @@ async fn process_crontab() {
 }
 
 async fn run_job_logic(job: Cron) {
-    if let CronType::Agent(uuids, AgentCronType::Task(task_event_type)) = job.cron_type {
-        task::crontab_task(job.id, job.name, uuids, task_event_type).await;
+    match job.cron_type {
+        CronType::Agent(uuids, AgentCronType::Task(task_event_type)) => {
+            task::crontab_task(job.id, job.name, uuids, task_event_type).await;
+        }
+
+        CronType::Server(ServerCronType::CleanUpDatabase) => {
+            if let Err(e) = cleanup_expired_data().await {
+                error!("Database cleanup failed: {}", e);
+            }
+        }
     }
 }

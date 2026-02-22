@@ -1,3 +1,5 @@
+pub mod clean_up;
+
 use crate::{DB, SERVER_CONFIG};
 use log::{LevelFilter, error, info};
 use migration::{Migrator, MigratorTrait};
