@@ -1,6 +1,7 @@
 # Error Handling
 
-The NodeGet project API uses a unified error handling mechanism to ensure all RPC calls provide consistent error response formats.
+The NodeGet project API uses a unified error handling mechanism to ensure all RPC calls provide consistent error
+response formats.
 
 ## Error Response Format
 
@@ -23,34 +24,34 @@ NodeGet defines a unified error enum `NodegetError` with the following error typ
 ### Error Types
 
 - **ParseError(String)** - Parse Error (Error Code: 101)
-  - Thrown when request data parsing fails
+    - Thrown when request data parsing fails
 
-- **PermissionDenied(String)** - Permission Denied (Error Code: 102)  
-  - Thrown when user doesn't have sufficient permissions to perform the operation
+- **PermissionDenied(String)** - Permission Denied (Error Code: 102)
+    - Thrown when user doesn't have sufficient permissions to perform the operation
 
 - **DatabaseError(String)** - Database Error (Error Code: 103)
-  - Thrown when database operations fail
+    - Thrown when database operations fail
 
 - **AgentConnectionError(String)** - Agent Connection Error (Error Code: 104)
-  - Thrown when connection to agent nodes fails
+    - Thrown when connection to agent nodes fails
 
 - **NotFound(String)** - Not Found (Error Code: 105)
-  - Thrown when requested resource doesn't exist
+    - Thrown when requested resource doesn't exist
 
 - **UuidNotFound(String)** - UUID Not Found (Error Code: 106)
-  - Thrown when requested UUID doesn't exist
+    - Thrown when requested UUID doesn't exist
 
 - **ConfigNotFound(String)** - Config Not Found (Error Code: 107)
-  - Thrown when requested configuration doesn't exist
+    - Thrown when requested configuration doesn't exist
 
 - **SerializationError(String)** - Serialization Error (Error Code: 101)
-  - Thrown when data serialization/deserialization fails
+    - Thrown when data serialization/deserialization fails
 
 - **IoError(String)** - IO Error (Error Code: 101)
-  - Thrown when input/output operations fail
+    - Thrown when input/output operations fail
 
 - **Other(String)** - Other Error (Error Code: 999)
-  - Used for other uncategorized errors
+    - Used for other uncategorized errors
 
 ## JsonError Structure
 
@@ -66,7 +67,7 @@ pub struct JsonError {
 ### Error Code Mapping
 
 - `101` - ParseError / SerializationError / IoError
-- `102` - PermissionDenied  
+- `102` - PermissionDenied
 - `103` - DatabaseError
 - `104` - AgentConnectionError
 - `105` - NotFound

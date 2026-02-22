@@ -24,7 +24,9 @@ static GLOBAL_ICMP_V6_CLIENT: OnceCell<Mutex<Client>> = OnceCell::const_new();
 //
 // # 返回值
 // 成功时返回往返时间，失败时返回错误
-async fn ping_v4_target(target: std::net::IpAddr) -> std::result::Result<std::time::Duration, SurgeError> {
+async fn ping_v4_target(
+    target: std::net::IpAddr,
+) -> std::result::Result<std::time::Duration, SurgeError> {
     let client_v4_mutex = GLOBAL_ICMP_V4_CLIENT
         .get_or_init(|| async {
             let config_v4 = Config::builder().kind(ICMP::V4).build();
@@ -55,7 +57,9 @@ async fn ping_v4_target(target: std::net::IpAddr) -> std::result::Result<std::ti
 //
 // # 返回值
 // 成功时返回往返时间，失败时返回错误
-async fn ping_v6_target(target: std::net::IpAddr) -> std::result::Result<std::time::Duration, SurgeError> {
+async fn ping_v6_target(
+    target: std::net::IpAddr,
+) -> std::result::Result<std::time::Duration, SurgeError> {
     let client_v6_mutex = GLOBAL_ICMP_V6_CLIENT
         .get_or_init(|| async {
             let config_v6 = Config::builder().kind(ICMP::V6).build();
@@ -105,8 +109,12 @@ pub async fn ping_target(target: String) -> Result<std::time::Duration> {
     };
 
     if target.is_ipv4() {
-        ping_v4_target(target).await.map_err(|e| NodegetError::Other(format!("{e}")))
+        ping_v4_target(target)
+            .await
+            .map_err(|e| NodegetError::Other(format!("{e}")))
     } else {
-        ping_v6_target(target).await.map_err(|e| NodegetError::Other(format!("{e}")))
+        ping_v6_target(target)
+            .await
+            .map_err(|e| NodegetError::Other(format!("{e}")))
     }
 }

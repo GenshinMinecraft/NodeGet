@@ -14,8 +14,9 @@ pub async fn get_all_keys(token: String, namespace: String) -> RpcResult<Box<Raw
 
         let keys = get_keys_from_kv(namespace).await?;
 
-        let json_str = serde_json::to_string(&keys)
-            .map_err(|e| NodegetError::SerializationError(format!("Failed to serialize keys: {e}")))?;
+        let json_str = serde_json::to_string(&keys).map_err(|e| {
+            NodegetError::SerializationError(format!("Failed to serialize keys: {e}"))
+        })?;
 
         RawValue::from_string(json_str)
             .map_err(|e| NodegetError::SerializationError(format!("{e}")).into())

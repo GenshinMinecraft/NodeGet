@@ -117,7 +117,11 @@ pub async fn execute_command(command: String) -> Result<String> {
 
                 return Ok(result);
             }
-            Ok(Err(e)) => return Err(NodegetError::Other(format!("Failed to wait for process: {e}"))),
+            Ok(Err(e)) => {
+                return Err(NodegetError::Other(format!(
+                    "Failed to wait for process: {e}"
+                )));
+            }
             Err(_) => {
                 return Err(NodegetError::Other(format!(
                     "Execution timed out (Limit: {}s)",

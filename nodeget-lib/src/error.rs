@@ -39,7 +39,7 @@ pub enum NodegetError {
 impl NodegetError {
     /// 获取错误对应的错误代码
     #[must_use]
-    pub fn error_code(&self) -> i128 {
+    pub const fn error_code(&self) -> i128 {
         match self {
             Self::ParseError(_) => 101,
             Self::InvalidInput(_) => 108,

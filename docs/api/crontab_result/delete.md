@@ -6,11 +6,13 @@
 
 ```json
 {
-    "token": "demo_token",
-    "crontab_result_delete": {
-        "cron_name": "cleanup_database",  // 可选，若指定则只删除该 cron_name 的记录
-        "before_time": 1700000000000      // 删除该时间之前的记录（毫秒时间戳）
-    }
+  "token": "demo_token",
+  "crontab_result_delete": {
+    "cron_name": "cleanup_database",
+    // 可选，若指定则只删除该 cron_name 的记录
+    "before_time": 1700000000000
+    // 删除该时间之前的记录（毫秒时间戳）
+  }
 }
 ```
 
@@ -18,8 +20,8 @@
 
 ```json
 {
-    "success": true,
-    "deleted_count": 100
+  "success": true,
+  "deleted_count": 100
 }
 ```
 
@@ -29,16 +31,16 @@
 
 ```json
 {
-    "jsonrpc": "2.0",
-    "method": "crontab_result.delete",
-    "params": [
-        "demo_token",
-        {
-            "cron_name": "cleanup_database",
-            "before_time": 1700000000000
-        }
-    ],
-    "id": 1
+  "jsonrpc": "2.0",
+  "method": "crontab_result.delete",
+  "params": [
+    "demo_token",
+    {
+      "cron_name": "cleanup_database",
+      "before_time": 1700000000000
+    }
+  ],
+  "id": 1
 }
 ```
 
@@ -46,15 +48,15 @@
 
 ```json
 {
-    "jsonrpc": "2.0",
-    "method": "crontab_result.delete",
-    "params": [
-        "demo_token",
-        {
-            "before_time": 1700000000000
-        }
-    ],
-    "id": 1
+  "jsonrpc": "2.0",
+  "method": "crontab_result.delete",
+  "params": [
+    "demo_token",
+    {
+      "before_time": 1700000000000
+    }
+  ],
+  "id": 1
 }
 ```
 
@@ -64,15 +66,33 @@
 
 ```json
 {
-  "scopes": ["global"],
+  "scopes": [
+    "global"
+  ],
   "permissions": [
-    {"crontab_result": {"delete": "cleanup_database"}},  // 删除指定 cron_name
-    {"crontab_result": {"delete": "backup_*"}},          // 删除匹配通配符的 cron_name
-    {"crontab_result": {"delete": "*"}}                   // 删除所有（全局权限）
+    {
+      "crontab_result": {
+        "delete": "cleanup_database"
+      }
+    },
+    // 删除指定 cron_name
+    {
+      "crontab_result": {
+        "delete": "backup_*"
+      }
+    },
+    // 删除匹配通配符的 cron_name
+    {
+      "crontab_result": {
+        "delete": "*"
+      }
+    }
+    // 删除所有（全局权限）
   ]
 }
 ```
 
-注意: 
+注意:
+
 - 若指定了 `cron_name`，则检查对该 cron_name 的删除权限
 - 若未指定 `cron_name`（删除所有），则需要全局删除权限 `{"delete": "*"}`

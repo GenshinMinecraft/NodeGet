@@ -36,16 +36,15 @@ pub async fn delete(token: String, target_token_key: Option<String>) -> RpcResul
                 )
             } else {
                 format!(
-                    "{{\"success\":false,\"message\":\"Token {} not found\"}}",
-                    target_key_to_delete
+                    "{{\"success\":false,\"message\":\"Token {target_key_to_delete} not found\"}}"
                 )
             }
         } else {
             if target_token_key.is_some() {
                 return Err(NodegetError::PermissionDenied(
-                "Insufficient permission to delete other tokens".to_owned(),
-            )
-            .into());
+                    "Insufficient permission to delete other tokens".to_owned(),
+                )
+                .into());
             }
 
             let target_key_to_delete = _current_token_info.token_key.clone();

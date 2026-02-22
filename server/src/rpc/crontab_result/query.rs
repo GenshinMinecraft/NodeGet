@@ -1,6 +1,6 @@
+use crate::DB;
 use crate::entity::crontab_result;
 use crate::rpc::crontab_result::auth::check_crontab_result_read_permission;
-use crate::DB;
 use jsonrpsee::core::RpcResult;
 use nodeget_lib::crontab_result::query::{CrontabResultDataQuery, CrontabResultQueryCondition};
 use nodeget_lib::error::NodegetError;
@@ -9,9 +9,9 @@ use serde_json::value::RawValue;
 
 pub async fn query(token: String, query: CrontabResultDataQuery) -> RpcResult<Box<RawValue>> {
     let process_logic = async {
-        let db = DB.get().ok_or_else(|| {
-            NodegetError::DatabaseError("DB not initialized".to_owned())
-        })?;
+        let db = DB
+            .get()
+            .ok_or_else(|| NodegetError::DatabaseError("DB not initialized".to_owned()))?;
 
         // 构建查询
         let mut select = crontab_result::Entity::find();
@@ -74,7 +74,11 @@ pub async fn query(token: String, query: CrontabResultDataQuery) -> RpcResult<Bo
         }
 
         // 默认按 run_time 降序排序（如果没有指定 Last）
-        if !query.condition.iter().any(|c| matches!(c, CrontabResultQueryCondition::Last)) {
+        if !query
+            .condition
+            .iter()
+            .any(|c| matches!(c, CrontabResultQueryCondition::Last))
+        {
             select = select.order_by_desc(crontab_result::Column::RunTime);
         }
 
@@ -84,8 +88,9 @@ pub async fn query(token: String, query: CrontabResultDataQuery) -> RpcResult<Bo
         })?;
 
         // 序列化结果
-        let json_str = serde_json::to_string(&results)
-            .map_err(|e| NodegetError::SerializationError(format!("Failed to serialize results: {e}")))?;
+        let json_str = serde_json::to_string(&results).map_err(|e| {
+            NodegetError::SerializationError(format!("Failed to serialize results: {e}"))
+        })?;
 
         RawValue::from_string(json_str)
             .map_err(|e| NodegetError::SerializationError(format!("{e}")).into())

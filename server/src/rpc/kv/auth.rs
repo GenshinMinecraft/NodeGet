@@ -13,10 +13,9 @@ use nodeget_lib::permission::token_auth::TokenOrAuth;
 /// 如果 key 合法返回 Ok(()，否则返回错误
 pub fn validate_key(key: &str) -> anyhow::Result<()> {
     if key.contains('*') {
-        return Err(NodegetError::InvalidInput(
-            "Key cannot contain '*' character".to_owned(),
-        )
-        .into());
+        return Err(
+            NodegetError::InvalidInput("Key cannot contain '*' character".to_owned()).into(),
+        );
     }
     Ok(())
 }
@@ -30,8 +29,7 @@ pub fn validate_key(key: &str) -> anyhow::Result<()> {
 /// # 返回值
 /// 如果 key 匹配模式返回 true
 fn key_matches_pattern(key: &str, pattern: &str) -> bool {
-    if pattern.ends_with('*') {
-        let prefix = &pattern[..pattern.len() - 1];
+    if let Some(prefix) = pattern.strip_suffix('*') {
         key.starts_with(prefix)
     } else {
         key == pattern
@@ -63,7 +61,8 @@ pub async fn check_kv_read_permission(
 
     // 先检查是否有全局读权限（key 为 "*" 表示所有 key）
     let global_read_perm = Permission::Kv(Kv::Read("*".to_owned()));
-    let has_global_read = check_token_limit(&token_or_auth, vec![scope.clone()], vec![global_read_perm]).await?;
+    let has_global_read =
+        check_token_limit(&token_or_auth, vec![scope.clone()], vec![global_read_perm]).await?;
 
     if has_global_read {
         return Ok(());
@@ -71,8 +70,12 @@ pub async fn check_kv_read_permission(
 
     // 检查是否有特定 key 的读权限
     let specific_read_perm = Permission::Kv(Kv::Read(key.to_owned()));
-    let has_specific_read =
-        check_token_limit(&token_or_auth, vec![scope.clone()], vec![specific_read_perm]).await?;
+    let has_specific_read = check_token_limit(
+        &token_or_auth,
+        vec![scope.clone()],
+        vec![specific_read_perm],
+    )
+    .await?;
 
     if has_specific_read {
         return Ok(());
@@ -96,10 +99,10 @@ pub async fn check_kv_read_permission(
 
         // 检查权限
         for perm in &limit.permissions {
-            if let Permission::Kv(Kv::Read(pattern)) = perm {
-                if key_matches_pattern(key, pattern) {
-                    return Ok(());
-                }
+            if let Permission::Kv(Kv::Read(pattern)) = perm
+                && key_matches_pattern(key, pattern)
+            {
+                return Ok(());
             }
         }
     }
@@ -144,8 +147,12 @@ pub async fn check_kv_write_permission(
 
     // 检查是否有特定 key 的写权限
     let specific_write_perm = Permission::Kv(Kv::Write(key.to_owned()));
-    let has_specific_write =
-        check_token_limit(&token_or_auth, vec![scope.clone()], vec![specific_write_perm]).await?;
+    let has_specific_write = check_token_limit(
+        &token_or_auth,
+        vec![scope.clone()],
+        vec![specific_write_perm],
+    )
+    .await?;
 
     if has_specific_write {
         return Ok(());
@@ -166,10 +173,10 @@ pub async fn check_kv_write_permission(
         }
 
         for perm in &limit.permissions {
-            if let Permission::Kv(Kv::Write(pattern)) = perm {
-                if key_matches_pattern(key, pattern) {
-                    return Ok(());
-                }
+            if let Permission::Kv(Kv::Write(pattern)) = perm
+                && key_matches_pattern(key, pattern)
+            {
+                return Ok(());
             }
         }
     }
@@ -205,8 +212,12 @@ pub async fn check_kv_delete_permission(
 
     // 先检查是否有全局删除权限（key 为 "*" 表示所有 key）
     let global_delete_perm = Permission::Kv(Kv::Delete("*".to_owned()));
-    let has_global_delete =
-        check_token_limit(&token_or_auth, vec![scope.clone()], vec![global_delete_perm]).await?;
+    let has_global_delete = check_token_limit(
+        &token_or_auth,
+        vec![scope.clone()],
+        vec![global_delete_perm],
+    )
+    .await?;
 
     if has_global_delete {
         return Ok(());
@@ -214,8 +225,12 @@ pub async fn check_kv_delete_permission(
 
     // 检查是否有特定 key 的删除权限
     let specific_delete_perm = Permission::Kv(Kv::Delete(key.to_owned()));
-    let has_specific_delete =
-        check_token_limit(&token_or_auth, vec![scope.clone()], vec![specific_delete_perm]).await?;
+    let has_specific_delete = check_token_limit(
+        &token_or_auth,
+        vec![scope.clone()],
+        vec![specific_delete_perm],
+    )
+    .await?;
 
     if has_specific_delete {
         return Ok(());
@@ -236,10 +251,10 @@ pub async fn check_kv_delete_permission(
         }
 
         for perm in &limit.permissions {
-            if let Permission::Kv(Kv::Delete(pattern)) = perm {
-                if key_matches_pattern(key, pattern) {
-                    return Ok(());
-                }
+            if let Permission::Kv(Kv::Delete(pattern)) = perm
+                && key_matches_pattern(key, pattern)
+            {
+                return Ok(());
             }
         }
     }
@@ -281,7 +296,7 @@ pub async fn check_kv_list_keys_permission(token: &str, namespace: &str) -> anyh
 }
 
 /// 检查是否有创建命名空间的权限
-/// 只有 SuperToken 才有权限创建命名空间
+/// 只有 `SuperToken` 才有权限创建命名空间
 ///
 /// # 参数
 /// * `token` - 令牌字符串
@@ -301,8 +316,5 @@ pub async fn check_kv_create_permission(token: &str) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    Err(NodegetError::PermissionDenied(
-        "Only SuperToken can create KV namespace".to_owned(),
-    )
-    .into())
+    Err(NodegetError::PermissionDenied("Only SuperToken can create KV namespace".to_owned()).into())
 }

@@ -112,7 +112,8 @@ async fn handle_agent(
         }
         Err(e) => {
             let nodeget_err = nodeget_lib::error::anyhow_to_nodeget_error(&e);
-            let error_json = generate_error_message(nodeget_err.error_code(), &format!("{nodeget_err}"));
+            let error_json =
+                generate_error_message(nodeget_err.error_code(), &format!("{nodeget_err}"));
 
             if let Err(e) = socket
                 .send(Message::Text(Utf8Bytes::from(error_json.to_string())))
@@ -194,12 +195,11 @@ async fn handle_user(
     info!("User connecting terminal to: {agent_uuid}");
 
     // 检查 token 是否存在
-    let token = match token {
-        Some(t) => t,
-        None => {
-            warn!("User connection rejected: missing token");
-            return;
-        }
+    let token = if let Some(t) = token {
+        t
+    } else {
+        warn!("User connection rejected: missing token");
+        return;
     };
 
     // 检查 Terminal Connect 权限

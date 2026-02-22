@@ -1,6 +1,6 @@
+use super::CleanupResult;
 use super::config::CleanupConfig;
 use super::utils::{get_limit_millis, is_valid_uuid};
-use super::CleanupResult;
 use crate::entity::{crontab_result, dynamic_monitoring, kv, static_monitoring, task};
 use anyhow::Result;
 use sea_orm::{
@@ -9,7 +9,7 @@ use sea_orm::{
 };
 use uuid::Uuid;
 
-/// 通用版本（适用于 SQLite）
+/// 通用版本（适用于 `SQLite`）
 pub async fn cleanup_expired_data_generic(db: &DatabaseConnection) -> Result<CleanupResult> {
     let mut result = CleanupResult::default();
 
@@ -46,9 +46,7 @@ pub async fn cleanup_expired_data_generic(db: &DatabaseConnection) -> Result<Cle
 }
 
 /// 通用版本: 获取所有需要清理的配置
-async fn get_cleanup_configs_generic(
-    db: &DatabaseConnection,
-) -> Result<Vec<CleanupConfig>> {
+async fn get_cleanup_configs_generic(db: &DatabaseConnection) -> Result<Vec<CleanupConfig>> {
     // 查询所有 kv 记录
     let records = kv::Entity::find().all(db).await?;
 
@@ -79,7 +77,7 @@ async fn get_cleanup_configs_generic(
     Ok(configs)
 }
 
-/// 通用版本: 清理 static_monitoring 表
+/// 通用版本: 清理 `static_monitoring` 表
 ///
 /// # 参数
 /// * `limit_millis` - 保留的毫秒数
@@ -118,7 +116,7 @@ async fn cleanup_static_monitoring_generic(
     Ok(deleted.rows_affected)
 }
 
-/// 通用版本: 清理 dynamic_monitoring 表
+/// 通用版本: 清理 `dynamic_monitoring` 表
 ///
 /// # 参数
 /// * `limit_millis` - 保留的毫秒数
@@ -198,16 +196,13 @@ async fn cleanup_task_generic(
     Ok(deleted.rows_affected)
 }
 
-/// 通用版本: 清理 crontab_result 表
+/// 通用版本: 清理 `crontab_result` 表
 ///
 /// # 参数
 /// * `limit_millis` - 保留的毫秒数
 ///
-/// 注意：crontab_result 是全局表，不关联特定 agent
-async fn cleanup_crontab_result_generic(
-    db: &DatabaseConnection,
-    limit_millis: i64,
-) -> Result<u64> {
+/// `注意：crontab_result` 是全局表，不关联特定 agent
+async fn cleanup_crontab_result_generic(db: &DatabaseConnection, limit_millis: i64) -> Result<u64> {
     // 获取 crontab_result 的最大 run_time
     let max_run_time: Option<i64> = crontab_result::Entity::find()
         .filter(crontab_result::Column::RunTime.is_not_null())
@@ -236,9 +231,9 @@ async fn cleanup_crontab_result_generic(
     Ok(deleted.rows_affected)
 }
 
-/// 从 global 配置中获取 crontab_result 的清理限制
+/// 从 global 配置中获取 `crontab_result` 的清理限制
 ///
-/// 查找 name 为 "global" 的 KV 记录，读取其中的 database_limit_crontab_result
+/// 查找 name 为 "global" 的 KV 记录，读取其中的 `database_limit_crontab_result`
 /// 若不存在则返回 None
 async fn get_global_crontab_result_limit(db: &DatabaseConnection) -> Result<Option<i64>> {
     let global_record = kv::Entity::find()
@@ -247,12 +242,15 @@ async fn get_global_crontab_result_limit(db: &DatabaseConnection) -> Result<Opti
         .await?;
 
     match global_record {
-        Some(record) => Ok(get_limit_millis(&record.kv_value, "database_limit_crontab_result")),
+        Some(record) => Ok(get_limit_millis(
+            &record.kv_value,
+            "database_limit_crontab_result",
+        )),
         None => Ok(None),
     }
 }
 
-/// 通用版本（适用于 SQLite）
+/// 通用版本（适用于 `SQLite`）
 pub async fn find_uuids_with_database_limit_generic(
     db: &DatabaseConnection,
 ) -> Result<Vec<String>> {
@@ -290,8 +288,7 @@ pub async fn find_uuids_with_database_limit_generic(
                 .kv_value
                 .get("kv")
                 .and_then(|kv| kv.as_object())
-                .map(|obj| obj.keys().any(|k| k.starts_with("database_limit_")))
-                .unwrap_or(false)
+                .is_some_and(|obj| obj.keys().any(|k| k.starts_with("database_limit_")))
         })
         .map(|record| record.name)
         .collect();
@@ -301,7 +298,7 @@ pub async fn find_uuids_with_database_limit_generic(
 
 /// 搜索数据库中 kv 表，查找满足以下条件的 UUID（分页处理版本）：
 /// - kv name 为有效的 UUID 格式
-/// - kv_value 中存在以 `database_limit_*` 开头的 key
+/// - `kv_value` 中存在以 `database_limit_*` 开头的 key
 ///
 /// 这个版本使用分页处理，适合处理大量数据，避免一次性加载所有记录
 ///
@@ -331,8 +328,7 @@ pub async fn find_uuids_with_database_limit_paginated(
                 .kv_value
                 .get("kv")
                 .and_then(|kv| kv.as_object())
-                .map(|obj| obj.keys().any(|k| k.starts_with("database_limit_")))
-                .unwrap_or(false)
+                .is_some_and(|obj| obj.keys().any(|k| k.starts_with("database_limit_")))
             {
                 result.push(record.name);
             }

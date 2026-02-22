@@ -1,8 +1,8 @@
 mod server_cron;
 mod task;
 
-use crate::db_connection::clean_up::cleanup_expired_data;
 use crate::DB;
+use crate::db_connection::clean_up::cleanup_expired_data;
 use crate::entity::{crontab, crontab_result};
 use chrono::{TimeZone, Utc};
 use cron::Schedule;
@@ -121,11 +121,10 @@ async fn process_crontab() {
             }
         };
 
-        let last_run = job
-            .last_run_time
-            .map_or_else(|| now - chrono::Duration::seconds(1), |t| {
-                Utc.timestamp_millis_opt(t).unwrap()
-            });
+        let last_run = job.last_run_time.map_or_else(
+            || now - chrono::Duration::seconds(1),
+            |t| Utc.timestamp_millis_opt(t).unwrap(),
+        );
 
         let should_run = schedule
             .after(&last_run)
@@ -180,12 +179,11 @@ async fn run_job_logic(job: Cron) {
 
 /// 运行数据库清理任务并记录结果
 async fn run_cleanup_database_job(cron_id: i64, cron_name: String) {
-    let db = match DB.get() {
-        Some(db) => db,
-        None => {
-            error!("DB not initialized for cleanup job [{cron_name}]");
-            return;
-        }
+    let db = if let Some(db) = DB.get() {
+        db
+    } else {
+        error!("DB not initialized for cleanup job [{cron_name}]");
+        return;
     };
 
     // 执行清理

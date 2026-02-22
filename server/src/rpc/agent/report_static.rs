@@ -52,7 +52,10 @@ pub async fn report_static(
                 .map_err(|e| NodegetError::SerializationError(e.to_string()))?,
         };
 
-        debug!("Received static data from [{}]", static_monitoring_data.uuid);
+        debug!(
+            "Received static data from [{}]",
+            static_monitoring_data.uuid
+        );
 
         let result = static_monitoring::Entity::insert(in_data)
             .exec(db)

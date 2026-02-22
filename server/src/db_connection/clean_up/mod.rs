@@ -1,6 +1,6 @@
 pub mod config;
-pub mod postgres;
 pub mod generic;
+pub mod postgres;
 pub mod utils;
 
 use crate::DB;
@@ -23,10 +23,10 @@ fn get_db() -> Result<&'static DatabaseConnection> {
 
 /// 清理过期的数据
 ///
-/// 根据 KV 表中设置的 database_limit_* 配置，清理各表中的过期数据
+/// 根据 KV 表中设置的 `database_limit`_* 配置，清理各表中的过期数据
 ///
 /// # 清理逻辑
-/// - 查询每个 agent_uuid 的最后一条数据的时间戳
+/// - 查询每个 `agent_uuid` 的最后一条数据的时间戳
 /// - 减去配置的毫秒数得到保留范围
 /// - 删除该范围之外的数据
 ///
@@ -47,7 +47,7 @@ pub async fn cleanup_expired_data() -> Result<CleanupResult> {
 
 /// 搜索数据库中 kv 表，查找满足以下条件的 UUID：
 /// - kv name 为有效的 UUID 格式
-/// - kv_value 中存在以 `database_limit_*` 开头的 key
+/// - `kv_value` 中存在以 `database_limit_*` 开头的 key
 ///
 /// 对于 PostgreSQL，使用 JSONB 操作符优化查询
 /// 对于 SQLite，使用内存过滤
@@ -69,7 +69,7 @@ pub async fn find_uuids_with_database_limit() -> Result<Vec<String>> {
 
 /// 搜索数据库中 kv 表，查找满足以下条件的 UUID（分页处理版本）：
 /// - kv name 为有效的 UUID 格式
-/// - kv_value 中存在以 `database_limit_*` 开头的 key
+/// - `kv_value` 中存在以 `database_limit_*` 开头的 key
 ///
 /// 这个版本使用分页处理，适合处理大量数据，避免一次性加载所有记录
 ///

@@ -3,8 +3,8 @@ use crate::rpc::kv::auth::check_kv_write_permission;
 use jsonrpsee::core::RpcResult;
 use log::debug;
 use nodeget_lib::error::NodegetError;
-use serde_json::value::RawValue;
 use serde_json::Value;
+use serde_json::value::RawValue;
 
 pub async fn set_value(
     token: String,

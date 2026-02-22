@@ -4,8 +4,8 @@ use nodeget_lib::kv::KVStore;
 use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use serde_json::Value;
 
-use crate::entity::kv;
 use crate::DB;
+use crate::entity::kv;
 
 /// 获取数据库连接
 fn get_db() -> Result<&'static DatabaseConnection> {
@@ -29,9 +29,9 @@ pub async fn create_kv(namespace: String) -> Result<KVStore> {
         .await?;
 
     if existing.is_some() {
-        return Err(NodegetError::DatabaseError(format!(
-            "Namespace '{namespace}' already exists"
-        )).into());
+        return Err(
+            NodegetError::DatabaseError(format!("Namespace '{namespace}' already exists")).into(),
+        );
     }
 
     // 创建新的 KVStore
@@ -71,9 +71,9 @@ pub async fn get_v_from_kv(namespace: String, key: String) -> Result<Option<Valu
             let kv_store: KVStore = serde_json::from_value(record.kv_value)?;
             Ok(kv_store.get(&key).cloned())
         }
-        None => Err(NodegetError::DatabaseError(format!(
-            "Namespace '{namespace}' not found"
-        )).into()),
+        None => {
+            Err(NodegetError::DatabaseError(format!("Namespace '{namespace}' not found")).into())
+        }
     }
 }
 
@@ -113,9 +113,9 @@ pub async fn set_v_to_kv(namespace: String, key: String, value: Value) -> Result
             active_model.update(db).await?;
             Ok(())
         }
-        None => Err(NodegetError::DatabaseError(format!(
-            "Namespace '{namespace}' not found"
-        )).into()),
+        None => {
+            Err(NodegetError::DatabaseError(format!("Namespace '{namespace}' not found")).into())
+        }
     }
 }
 
@@ -182,9 +182,9 @@ pub async fn delete_key_from_kv(namespace: String, key: String) -> Result<()> {
             active_model.update(db).await?;
             Ok(())
         }
-        None => Err(NodegetError::DatabaseError(format!(
-            "Namespace '{namespace}' not found"
-        )).into()),
+        None => {
+            Err(NodegetError::DatabaseError(format!("Namespace '{namespace}' not found")).into())
+        }
     }
 }
 
@@ -210,9 +210,9 @@ pub async fn delete_kv(namespace: String) -> Result<()> {
             active_model.delete(db).await?;
             Ok(())
         }
-        None => Err(NodegetError::DatabaseError(format!(
-            "Namespace '{namespace}' not found"
-        )).into()),
+        None => {
+            Err(NodegetError::DatabaseError(format!("Namespace '{namespace}' not found")).into())
+        }
     }
 }
 
@@ -237,13 +237,13 @@ pub async fn get_keys_from_kv(namespace: String) -> Result<Vec<String>> {
             let kv_store: KVStore = serde_json::from_value(record.kv_value)?;
             Ok(kv_store.keys())
         }
-        None => Err(NodegetError::DatabaseError(format!(
-            "Namespace '{namespace}' not found"
-        )).into()),
+        None => {
+            Err(NodegetError::DatabaseError(format!("Namespace '{namespace}' not found")).into())
+        }
     }
 }
 
-/// 获取完整的 KVStore
+/// 获取完整的 `KVStore`
 ///
 /// # 参数
 /// * `namespace` - 命名空间名称
@@ -264,8 +264,8 @@ pub async fn get_kv_store(namespace: String) -> Result<KVStore> {
             let kv_store: KVStore = serde_json::from_value(record.kv_value)?;
             Ok(kv_store)
         }
-        None => Err(NodegetError::DatabaseError(format!(
-            "Namespace '{namespace}' not found"
-        )).into()),
+        None => {
+            Err(NodegetError::DatabaseError(format!("Namespace '{namespace}' not found")).into())
+        }
     }
 }

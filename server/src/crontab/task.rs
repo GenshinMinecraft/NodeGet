@@ -18,9 +18,7 @@ pub async fn crontab_task(
     let db = match TaskRpcImpl::get_db() {
         Ok(db) => db,
         Err(e) => {
-            error!(
-                "Critical: Failed to get DB connection for CronJob [{cron_name}]: {e:?}"
-            );
+            error!("Critical: Failed to get DB connection for CronJob [{cron_name}]: {e:?}");
             return;
         }
     };
@@ -68,7 +66,10 @@ pub async fn crontab_task(
                             NodegetError::DatabaseError(format!("Database delete error: {del_err}"))
                         });
                     error!("Error sending task event: {}", e.1);
-                    Err(NodegetError::AgentConnectionError(format!("Error sending task event: {}", e.1)))
+                    Err(NodegetError::AgentConnectionError(format!(
+                        "Error sending task event: {}",
+                        e.1
+                    )))
                 }
             }
         };
@@ -77,19 +78,12 @@ pub async fn crontab_task(
         let (success, message) = match process_logic.await {
             Ok(new_id) => (
                 true,
-                format!(
-                    "Task dispatched successfully to agent [{uuid}]. Task ID: {new_id}"
-                ),
+                format!("Task dispatched successfully to agent [{uuid}]. Task ID: {new_id}"),
             ),
-            Err(e) => {
-                (
-                    false,
-                    format!(
-                        "Failed to dispatch to agent [{uuid}]. Error: {}",
-                        e
-                    ),
-                )
-            }
+            Err(e) => (
+                false,
+                format!("Failed to dispatch to agent [{uuid}]. Error: {e}"),
+            ),
         };
 
         let crontab_log = crontab_result::ActiveModel {
@@ -102,9 +96,7 @@ pub async fn crontab_task(
         };
 
         if let Err(e) = crontab_result::Entity::insert(crontab_log).exec(db).await {
-            error!(
-                "Failed to save CrontabResult for cron [{cron_name}]: {e}"
-            );
+            error!("Failed to save CrontabResult for cron [{cron_name}]: {e}");
         }
     }
 }

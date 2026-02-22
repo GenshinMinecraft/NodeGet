@@ -36,7 +36,9 @@ pub async fn create(
         match &cron_type {
             CronType::Agent(uuids, agent_cron_type) => {
                 if uuids.is_empty() {
-                    return Err(NodegetError::ParseError("Agent list cannot be empty".to_string()).into());
+                    return Err(
+                        NodegetError::ParseError("Agent list cannot be empty".to_string()).into(),
+                    );
                 }
                 for uuid in uuids {
                     scopes.push(Scope::AgentUuid(*uuid));
@@ -102,7 +104,7 @@ pub async fn create(
             inserted.id
         };
 
-        let json_str = format!("{{\"id\":{}}}", res_id);
+        let json_str = format!("{{\"id\":{res_id}}}");
         RawValue::from_string(json_str)
             .map_err(|e| NodegetError::SerializationError(format!("{e}")).into())
     };

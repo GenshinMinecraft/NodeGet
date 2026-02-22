@@ -33,7 +33,9 @@ pub async fn handle_pty_url(url: std::result::Result<Url, String>) -> Result<()>
     };
 
     let Ok(ws) = connect_async(url.to_string()).await else {
-        return Err(NodegetError::AgentConnectionError("Failed to connect to WebSocket".to_owned()));
+        return Err(NodegetError::AgentConnectionError(
+            "Failed to connect to WebSocket".to_owned(),
+        ));
     };
 
     let ws_stream = ws.0;
@@ -86,11 +88,10 @@ where
         .master
         .try_clone_reader()
         .map_err(|e| NodegetError::Other(format!("Failed to get PTY Reader: {e}")))?;
-    let pty_writer = Arc::new(Mutex::new(
-        pair.master
-            .take_writer()
-            .map_err(|e| NodegetError::Other(format!("Failed to get PTY Writer: {e}")))?,
-    ));
+    let pty_writer =
+        Arc::new(Mutex::new(pair.master.take_writer().map_err(|e| {
+            NodegetError::Other(format!("Failed to get PTY Writer: {e}"))
+        })?));
 
     let mut child = pair
         .slave

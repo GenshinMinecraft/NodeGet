@@ -9,17 +9,16 @@
     dead_code
 )]
 
-
 use axum::routing::any;
 use log::info;
 use std::str::FromStr;
 use tower::Service;
 
 use crate::crontab::init_crontab_worker;
+use crate::rpc::get_modules;
 use crate::token::super_token::generate_super_token;
 #[cfg(all(not(target_os = "windows"), feature = "jemalloc"))]
 use tikv_jemallocator::Jemalloc;
-use crate::rpc::get_modules;
 
 #[cfg(all(not(target_os = "windows"), feature = "jemalloc"))]
 #[global_allocator]
@@ -35,11 +34,12 @@ mod rpc;
 mod terminal;
 // 令牌模块，处理令牌相关功能
 mod crontab;
-mod token;
 mod kv;
+mod token;
 
 // 全局数据库连接单例
-pub static DB: tokio::sync::OnceCell<sea_orm::DatabaseConnection> = tokio::sync::OnceCell::const_new();
+pub static DB: tokio::sync::OnceCell<sea_orm::DatabaseConnection> =
+    tokio::sync::OnceCell::const_new();
 // 全局服务器配置单例
 static SERVER_CONFIG: std::sync::OnceLock<nodeget_lib::config::server::ServerConfig> =
     std::sync::OnceLock::new();
@@ -120,7 +120,7 @@ async fn main() {
         sessions: std::sync::Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
     };
 
-    let mut rpc_module = get_modules();
+    let rpc_module = get_modules();
 
     let (stop_handle, _server_handle) = jsonrpsee::server::stop_channel();
 

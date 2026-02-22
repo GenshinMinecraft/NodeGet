@@ -6,13 +6,13 @@
 
 ```json
 {
-    "token": "demo_token",
-    "crontab_result_data_query": {
-        "condition": [
-            // CrontabResultQueryCondition 结构体，该结构体参考 CrontabResult 总览
-            // 该字段为 Vec<_>，可指定多个
-        ]
-    }
+  "token": "demo_token",
+  "crontab_result_data_query": {
+    "condition": [
+      // CrontabResultQueryCondition 结构体，该结构体参考 CrontabResult 总览
+      // 该字段为 Vec<_>，可指定多个
+    ]
+  }
 }
 ```
 
@@ -20,15 +20,15 @@
 
 ```json
 [
-    {
-        "id": 1,
-        "cron_id": 5,
-        "cron_name": "cleanup_database",
-        "run_time": 1769341269012,
-        "success": true,
-        "message": "Cleaned 100 records"
-    }
-    // 该字段为 Vec<_>，可指定多个
+  {
+    "id": 1,
+    "cron_id": 5,
+    "cron_name": "cleanup_database",
+    "run_time": 1769341269012,
+    "success": true,
+    "message": "Cleaned 100 records"
+  }
+  // 该字段为 Vec<_>，可指定多个
 ]
 ```
 
@@ -38,17 +38,19 @@
 
 ```json
 {
-    "jsonrpc": "2.0",
-    "method": "crontab_result.query",
-    "params": [
-        "demo_token",
+  "jsonrpc": "2.0",
+  "method": "crontab_result.query",
+  "params": [
+    "demo_token",
+    {
+      "condition": [
         {
-            "condition": [
-                {"cron_name": "cleanup_database"}
-            ]
+          "cron_name": "cleanup_database"
         }
-    ],
-    "id": 1
+      ]
+    }
+  ],
+  "id": 1
 }
 ```
 
@@ -56,19 +58,28 @@
 
 ```json
 {
-    "jsonrpc": "2.0",
-    "method": "crontab_result.query",
-    "params": [
-        "demo_token",
+  "jsonrpc": "2.0",
+  "method": "crontab_result.query",
+  "params": [
+    "demo_token",
+    {
+      "condition": [
         {
-            "condition": [
-                {"cron_name": "cleanup_database"},
-                {"run_time_from_to": [1700000000000, 1800000000000]},
-                {"is_success": null}
-            ]
+          "cron_name": "cleanup_database"
+        },
+        {
+          "run_time_from_to": [
+            1700000000000,
+            1800000000000
+          ]
+        },
+        {
+          "is_success": null
         }
-    ],
-    "id": 1
+      ]
+    }
+  ],
+  "id": 1
 }
 ```
 
@@ -76,19 +87,25 @@
 
 ```json
 {
-    "jsonrpc": "2.0",
-    "method": "crontab_result.query",
-    "params": [
-        "demo_token",
+  "jsonrpc": "2.0",
+  "method": "crontab_result.query",
+  "params": [
+    "demo_token",
+    {
+      "condition": [
         {
-            "condition": [
-                {"cron_name": "backup_database"},
-                {"is_failure": null},
-                {"limit": 10}
-            ]
+          "cron_name": "backup_database"
+        },
+        {
+          "is_failure": null
+        },
+        {
+          "limit": 10
         }
-    ],
-    "id": 1
+      ]
+    }
+  ],
+  "id": 1
 }
 ```
 
@@ -96,18 +113,22 @@
 
 ```json
 {
-    "jsonrpc": "2.0",
-    "method": "crontab_result.query",
-    "params": [
-        "demo_token",
+  "jsonrpc": "2.0",
+  "method": "crontab_result.query",
+  "params": [
+    "demo_token",
+    {
+      "condition": [
         {
-            "condition": [
-                {"cron_name": "cleanup_database"},
-                {"last": null}
-            ]
+          "cron_name": "cleanup_database"
+        },
+        {
+          "last": null
         }
-    ],
-    "id": 1
+      ]
+    }
+  ],
+  "id": 1
 }
 ```
 
@@ -117,18 +138,22 @@
 
 ```json
 {
-    "jsonrpc": "2.0",
-    "method": "crontab_result.query",
-    "params": [
-        "demo_token",
+  "jsonrpc": "2.0",
+  "method": "crontab_result.query",
+  "params": [
+    "demo_token",
+    {
+      "condition": [
         {
-            "condition": [
-                {"cron_name": "cleanup_database"},
-                {"limit": 50}
-            ]
+          "cron_name": "cleanup_database"
+        },
+        {
+          "limit": 50
         }
-    ],
-    "id": 1
+      ]
+    }
+  ],
+  "id": 1
 }
 ```
 

@@ -34,11 +34,9 @@ pub async fn create_task(
         .await?;
 
         if !is_allowed {
-            return Err(NodegetError::PermissionDenied(
-                format!(
-                    "Permission Denied: Missing Task Create ({task_name}) permission for this Agent"
-                ),
-            )
+            return Err(NodegetError::PermissionDenied(format!(
+                "Permission Denied: Missing Task Create ({task_name}) permission for this Agent"
+            ))
             .into());
         }
 
@@ -75,7 +73,7 @@ pub async fn create_task(
 
         match manager.send_event(target_uuid, task).await {
             Ok(()) => {
-                let json_str = format!("{{\"id\":{}}}", task_id);
+                let json_str = format!("{{\"id\":{task_id}}}");
                 RawValue::from_string(json_str)
                     .map_err(|e| NodegetError::SerializationError(e.to_string()).into())
             }
@@ -88,7 +86,11 @@ pub async fn create_task(
                         NodegetError::DatabaseError(format!("Database delete error: {del_err}"))
                     });
                 error!("Error sending task event: {}", e.1);
-                Err(NodegetError::AgentConnectionError(format!("Error sending task event: {}", e.1)).into())
+                Err(NodegetError::AgentConnectionError(format!(
+                    "Error sending task event: {}",
+                    e.1
+                ))
+                .into())
             }
         }
     };

@@ -1,7 +1,7 @@
+use crate::DB;
 use crate::entity::crontab_result;
 use crate::rpc::crontab_result::CrontabResultDelete;
 use crate::rpc::crontab_result::auth::check_crontab_result_delete_permission;
-use crate::DB;
 use jsonrpsee::core::RpcResult;
 use nodeget_lib::error::NodegetError;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
@@ -9,9 +9,9 @@ use serde_json::value::RawValue;
 
 pub async fn delete(token: String, delete_params: CrontabResultDelete) -> RpcResult<Box<RawValue>> {
     let process_logic = async {
-        let db = DB.get().ok_or_else(|| {
-            NodegetError::DatabaseError("DB not initialized".to_owned())
-        })?;
+        let db = DB
+            .get()
+            .ok_or_else(|| NodegetError::DatabaseError("DB not initialized".to_owned()))?;
 
         // 检查删除权限
         check_crontab_result_delete_permission(&token, delete_params.cron_name.as_deref()).await?;
@@ -38,8 +38,9 @@ pub async fn delete(token: String, delete_params: CrontabResultDelete) -> RpcRes
             "deleted_count": deleted_count,
         });
 
-        let json_str = serde_json::to_string(&response)
-            .map_err(|e| NodegetError::SerializationError(format!("Failed to serialize response: {e}")))?;
+        let json_str = serde_json::to_string(&response).map_err(|e| {
+            NodegetError::SerializationError(format!("Failed to serialize response: {e}"))
+        })?;
 
         RawValue::from_string(json_str)
             .map_err(|e| NodegetError::SerializationError(format!("{e}")).into())

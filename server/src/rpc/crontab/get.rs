@@ -50,8 +50,9 @@ pub async fn get(token: String) -> RpcResult<Box<RawValue>> {
         }
 
         let crontabs = extract_allowed_uuids(&token_info).await?;
-        let json_str = serde_json::to_string(&crontabs)
-            .map_err(|e| NodegetError::SerializationError(format!("Failed to serialize crontabs: {e}")))?;
+        let json_str = serde_json::to_string(&crontabs).map_err(|e| {
+            NodegetError::SerializationError(format!("Failed to serialize crontabs: {e}"))
+        })?;
 
         RawValue::from_string(json_str)
             .map_err(|e| NodegetError::SerializationError(e.to_string()).into())
@@ -71,10 +72,13 @@ pub async fn get(token: String) -> RpcResult<Box<RawValue>> {
 }
 
 async fn get_crontabs_by_uuids(uuids: Vec<Uuid>) -> anyhow::Result<Vec<Cron>> {
-    let db = DB.get()
+    let db = DB
+        .get()
         .ok_or_else(|| NodegetError::DatabaseError("DB not initialized".to_owned()))?;
 
-    let models = crontab::Entity::find().all(db).await
+    let models = crontab::Entity::find()
+        .all(db)
+        .await
         .map_err(|e| NodegetError::DatabaseError(format!("{e}")))?;
 
     let uuid_set: HashSet<Uuid> = uuids.into_iter().collect();
@@ -113,10 +117,13 @@ async fn get_crontabs_by_uuids(uuids: Vec<Uuid>) -> anyhow::Result<Vec<Cron>> {
 }
 
 async fn get_all_crontabs() -> anyhow::Result<Vec<Cron>> {
-    let db = DB.get()
+    let db = DB
+        .get()
         .ok_or_else(|| NodegetError::DatabaseError("DB not initialized".to_owned()))?;
 
-    let models = crontab::Entity::find().all(db).await
+    let models = crontab::Entity::find()
+        .all(db)
+        .await
         .map_err(|e| NodegetError::DatabaseError(e.to_string()))?;
 
     let crons = models

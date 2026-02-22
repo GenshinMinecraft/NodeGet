@@ -14,8 +14,9 @@ pub async fn create(token: String, name: String) -> RpcResult<Box<RawValue>> {
 
         let kv_store = create_kv(name).await?;
 
-        let json_str = serde_json::to_string(&kv_store)
-            .map_err(|e| NodegetError::SerializationError(format!("Failed to serialize KV store: {e}")))?;
+        let json_str = serde_json::to_string(&kv_store).map_err(|e| {
+            NodegetError::SerializationError(format!("Failed to serialize KV store: {e}"))
+        })?;
 
         RawValue::from_string(json_str)
             .map_err(|e| NodegetError::SerializationError(format!("{e}")).into())

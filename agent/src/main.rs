@@ -57,11 +57,15 @@ async fn main() -> anyhow::Result<()> {
         .map_err(|e| NodegetError::ConfigNotFound(format!("Failed to load config: {e}")))?;
 
     // 使用配置的日志级别初始化简单日志系统
-    let log_level = config.log_level.as_ref()
+    let log_level = config
+        .log_level
+        .as_ref()
         .ok_or(NodegetError::ParseError("log_level is not set".to_owned()))?;
-    simple_logger::init_with_level(Level::from_str(log_level)
-        .map_err(|e| NodegetError::ParseError(format!("Invalid log_level: {e}")))?)
-        .map_err(|e| NodegetError::Other(format!("Failed to init logger: {e}")))?;
+    simple_logger::init_with_level(
+        Level::from_str(log_level)
+            .map_err(|e| NodegetError::ParseError(format!("Invalid log_level: {e}")))?,
+    )
+    .map_err(|e| NodegetError::Other(format!("Failed to init logger: {e}")))?;
 
     // 比较并验证代理 UUID
     if let Err(e) = compare_uuid(config.agent_uuid) {
@@ -71,13 +75,22 @@ async fn main() -> anyhow::Result<()> {
     info!("Starting nodeget-agent with config: {config:?}");
 
     // 将配置设置到全局静态变量中
-    AGENT_CONFIG.set(config).map_err(|_| NodegetError::Other("Failed to set AGENT_CONFIG".to_owned()))?;
+    AGENT_CONFIG
+        .set(config)
+        .map_err(|_| NodegetError::Other("Failed to set AGENT_CONFIG".to_owned()))?;
 
     //////////
 
     // 初始化与多个服务器的连接
-    let servers = AGENT_CONFIG.get().unwrap().server.clone()
-        .ok_or(NodegetError::ConfigNotFound("No server configuration found".to_owned()))?;
+    let servers =
+        AGENT_CONFIG
+            .get()
+            .unwrap()
+            .server
+            .clone()
+            .ok_or(NodegetError::ConfigNotFound(
+                "No server configuration found".to_owned(),
+            ))?;
     rpc::multi_server::init_connections(servers);
 
     // 启动静态监控数据上报任务
@@ -101,7 +114,9 @@ async fn main() -> anyhow::Result<()> {
     });
 
     // 等待 Ctrl+C 信号以优雅地关闭程序
-    tokio::signal::ctrl_c().await.map_err(|e| NodegetError::Other(format!("Failed to listen for ctrl_c: {e}")))?;
-    
+    tokio::signal::ctrl_c()
+        .await
+        .map_err(|e| NodegetError::Other(format!("Failed to listen for ctrl_c: {e}")))?;
+
     Ok(())
 }

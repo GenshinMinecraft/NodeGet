@@ -18,9 +18,9 @@ use sea_orm::QueryFilter;
 // # 返回值
 // 成功时返回令牌信息，失败时返回错误
 pub async fn get_token(token_or_auth: &TokenOrAuth) -> anyhow::Result<Token> {
-    let db = DB
-        .get()
-        .ok_or_else(|| NodegetError::ConfigNotFound("Database connection not initialized".to_owned()))?;
+    let db = DB.get().ok_or_else(|| {
+        NodegetError::ConfigNotFound("Database connection not initialized".to_owned())
+    })?;
 
     // 验证认证信息并从数据库获取对应的token记录
     let token_model = match token_or_auth {
@@ -31,10 +31,14 @@ pub async fn get_token(token_or_auth: &TokenOrAuth) -> anyhow::Result<Token> {
                 .one(db)
                 .await
                 .map_err(|e| NodegetError::DatabaseError(format!("Database query error: {e}")))?
-                .ok_or_else(|| NodegetError::NotFound("Token key not found in database".to_owned()))?;
+                .ok_or_else(|| {
+                    NodegetError::NotFound("Token key not found in database".to_owned())
+                })?;
 
             if model.token_hash != hash_string(secret) {
-                return Err(NodegetError::PermissionDenied("Invalid token secret".to_owned()).into());
+                return Err(
+                    NodegetError::PermissionDenied("Invalid token secret".to_owned()).into(),
+                );
             }
 
             model
@@ -46,7 +50,9 @@ pub async fn get_token(token_or_auth: &TokenOrAuth) -> anyhow::Result<Token> {
                 .one(db)
                 .await
                 .map_err(|e| NodegetError::DatabaseError(format!("Database query error: {e}")))?
-                .ok_or_else(|| NodegetError::NotFound("Username not found in database".to_owned()))?;
+                .ok_or_else(|| {
+                    NodegetError::NotFound("Username not found in database".to_owned())
+                })?;
 
             let p_hash = hash_string(password);
             if model.password_hash != Some(p_hash) {
@@ -57,8 +63,9 @@ pub async fn get_token(token_or_auth: &TokenOrAuth) -> anyhow::Result<Token> {
         }
     };
 
-    let token_limit: Vec<Limit> = serde_json::from_value(token_model.token_limit)
-        .map_err(|e| NodegetError::SerializationError(format!("Failed to parse token permissions: {e}")))?;
+    let token_limit: Vec<Limit> = serde_json::from_value(token_model.token_limit).map_err(|e| {
+        NodegetError::SerializationError(format!("Failed to parse token permissions: {e}"))
+    })?;
 
     Ok(Token {
         version: token_model.version,

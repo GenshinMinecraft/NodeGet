@@ -47,7 +47,7 @@ pub async fn delete(token: String, name: String) -> RpcResult<Box<RawValue>> {
             .await
             .map_err(|e| NodegetError::Other(format!("Failed to delete crontab: {e}")))?;
 
-        let json_str = format!("{{\"success\":{}}}", deleted);
+        let json_str = format!("{{\"success\":{deleted}}}");
         RawValue::from_string(json_str)
             .map_err(|e| NodegetError::SerializationError(format!("{e}")).into())
     };

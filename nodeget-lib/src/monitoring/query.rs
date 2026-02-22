@@ -15,20 +15,22 @@ pub enum StaticDataQueryField {
 
 impl StaticDataQueryField {
     /// 获取字段对应的数据库列名
-    pub fn column_name(&self) -> &'static str {
+    #[must_use]
+    pub const fn column_name(&self) -> &'static str {
         match self {
-            StaticDataQueryField::Cpu => "cpu_data",
-            StaticDataQueryField::System => "system_data",
-            StaticDataQueryField::Gpu => "gpu_data",
+            Self::Cpu => "cpu_data",
+            Self::System => "system_data",
+            Self::Gpu => "gpu_data",
         }
     }
 
     /// 获取字段的 JSON 键名
-    pub fn json_key(&self) -> &'static str {
+    #[must_use]
+    pub const fn json_key(&self) -> &'static str {
         match self {
-            StaticDataQueryField::Cpu => "cpu",
-            StaticDataQueryField::System => "system",
-            StaticDataQueryField::Gpu => "gpu",
+            Self::Cpu => "cpu",
+            Self::System => "system",
+            Self::Gpu => "gpu",
         }
     }
 }
@@ -55,28 +57,30 @@ pub enum DynamicDataQueryField {
 
 impl DynamicDataQueryField {
     /// 获取字段对应的数据库列名
-    pub fn column_name(&self) -> &'static str {
+    #[must_use]
+    pub const fn column_name(&self) -> &'static str {
         match self {
-            DynamicDataQueryField::Cpu => "cpu_data",
-            DynamicDataQueryField::Ram => "ram_data",
-            DynamicDataQueryField::Load => "load_data",
-            DynamicDataQueryField::System => "system_data",
-            DynamicDataQueryField::Disk => "disk_data",
-            DynamicDataQueryField::Network => "network_data",
-            DynamicDataQueryField::Gpu => "gpu_data",
+            Self::Cpu => "cpu_data",
+            Self::Ram => "ram_data",
+            Self::Load => "load_data",
+            Self::System => "system_data",
+            Self::Disk => "disk_data",
+            Self::Network => "network_data",
+            Self::Gpu => "gpu_data",
         }
     }
 
     /// 获取字段的 JSON 键名
-    pub fn json_key(&self) -> &'static str {
+    #[must_use]
+    pub const fn json_key(&self) -> &'static str {
         match self {
-            DynamicDataQueryField::Cpu => "cpu",
-            DynamicDataQueryField::Ram => "ram",
-            DynamicDataQueryField::Load => "load",
-            DynamicDataQueryField::System => "system",
-            DynamicDataQueryField::Disk => "disk",
-            DynamicDataQueryField::Network => "network",
-            DynamicDataQueryField::Gpu => "gpu",
+            Self::Cpu => "cpu",
+            Self::Ram => "ram",
+            Self::Load => "load",
+            Self::System => "system",
+            Self::Disk => "disk",
+            Self::Network => "network",
+            Self::Gpu => "gpu",
         }
     }
 }

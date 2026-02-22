@@ -33,10 +33,10 @@ use sea_orm::{ColumnTrait, DeleteResult, EntityTrait, QueryFilter};
 // 返回删除结果，包含删除的行数，或数据库错误
 pub async fn delete_token_by_key(token_key: String) -> Result<DeleteResult, sea_orm::DbErr> {
     let Some(db) = DB.get() else {
-            return Err(sea_orm::DbErr::Conn(sea_orm::RuntimeErr::Internal(
-                "Database not initialized".to_owned(),
-            )));
-        };
+        return Err(sea_orm::DbErr::Conn(sea_orm::RuntimeErr::Internal(
+            "Database not initialized".to_owned(),
+        )));
+    };
 
     // 根据 token_key 删除令牌
     let delete_result = token::Entity::delete_many()
@@ -56,10 +56,10 @@ pub async fn delete_token_by_key(token_key: String) -> Result<DeleteResult, sea_
 // 返回删除结果，包含删除的行数，或数据库错误
 pub async fn delete_token_by_username(username: String) -> Result<DeleteResult, sea_orm::DbErr> {
     let Some(db) = DB.get() else {
-            return Err(sea_orm::DbErr::Conn(sea_orm::RuntimeErr::Internal(
-                "Database not initialized".to_owned(),
-            )));
-        };
+        return Err(sea_orm::DbErr::Conn(sea_orm::RuntimeErr::Internal(
+            "Database not initialized".to_owned(),
+        )));
+    };
 
     // 根据用户名删除令牌
     let delete_result = token::Entity::delete_many()

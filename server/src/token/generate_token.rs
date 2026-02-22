@@ -42,9 +42,9 @@ pub async fn generate_and_store_token(
         .into());
     }
 
-    let db = DB
-        .get()
-        .ok_or_else(|| NodegetError::ConfigNotFound("Database connection not initialized".to_owned()))?;
+    let db = DB.get().ok_or_else(|| {
+        NodegetError::ConfigNotFound("Database connection not initialized".to_owned())
+    })?;
 
     if username.is_some() != password.is_some() {
         return Err(NodegetError::ParseError(
@@ -60,8 +60,9 @@ pub async fn generate_and_store_token(
 
     let password_hash_value = password.as_ref().map(|pw| hash_string(pw));
 
-    let token_limit_json = serde_json::to_value(token_limit)
-        .map_err(|e| NodegetError::SerializationError(format!("Failed to serialize token limits: {e}")))?;
+    let token_limit_json = serde_json::to_value(token_limit).map_err(|e| {
+        NodegetError::SerializationError(format!("Failed to serialize token limits: {e}"))
+    })?;
 
     let new_token_model = token::ActiveModel {
         id: ActiveValue::NotSet,

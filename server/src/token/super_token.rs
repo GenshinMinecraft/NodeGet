@@ -11,9 +11,9 @@ use sea_orm::{EntityTrait, Set};
 // # 返回值
 // 成功时返回 Some((full_token, raw_password))，如果已存在则返回 None，失败时返回错误消息
 pub async fn generate_super_token() -> anyhow::Result<Option<(String, String)>> {
-    let db = DB
-        .get()
-        .ok_or_else(|| NodegetError::DatabaseError("Database connection not initialized".to_string()))?;
+    let db = DB.get().ok_or_else(|| {
+        NodegetError::DatabaseError("Database connection not initialized".to_string())
+    })?;
 
     let existing_super = token::Entity::find_by_id(1)
         .one(db)
@@ -50,7 +50,9 @@ pub async fn generate_super_token() -> anyhow::Result<Option<(String, String)>> 
     token::Entity::insert(super_token_model)
         .exec(db)
         .await
-        .map_err(|e| NodegetError::DatabaseError(format!("Failed to initialize super token: {e}")))?;
+        .map_err(|e| {
+            NodegetError::DatabaseError(format!("Failed to initialize super token: {e}"))
+        })?;
 
     Ok(Some((full_token, raw_password)))
 }
@@ -63,17 +65,23 @@ pub async fn generate_super_token() -> anyhow::Result<Option<(String, String)>> 
 // # 返回值
 // 返回布尔值表示是否为超级令牌，失败时返回错误消息
 pub async fn check_super_token(token_or_auth: &TokenOrAuth) -> anyhow::Result<bool> {
-    let db = DB.get().ok_or_else(|| NodegetError::DatabaseError("Database connection not initialized".to_owned()))?;
+    let db = DB.get().ok_or_else(|| {
+        NodegetError::DatabaseError("Database connection not initialized".to_owned())
+    })?;
     let super_record = token::Entity::find_by_id(1)
         .one(db)
         .await
         .map_err(|e| NodegetError::DatabaseError(format!("Database error: {e}")))?
-        .ok_or_else(|| NodegetError::NotFound("Super Token record (ID 1) not found in database".to_owned()))?;
+        .ok_or_else(|| {
+            NodegetError::NotFound("Super Token record (ID 1) not found in database".to_owned())
+        })?;
 
     match token_or_auth {
-        TokenOrAuth::Token(key, secret) => Ok(key == &super_record.token_key
-            && hash_string(secret) == super_record.token_hash),
-        TokenOrAuth::Auth(username, password) => Ok(Some(username.clone()) == super_record.username
+        TokenOrAuth::Token(key, secret) => {
+            Ok(key == &super_record.token_key && hash_string(secret) == super_record.token_hash)
+        }
+        TokenOrAuth::Auth(username, password) => Ok(Some(username.clone())
+            == super_record.username
             && Some(hash_string(password)) == super_record.password_hash),
     }
 }

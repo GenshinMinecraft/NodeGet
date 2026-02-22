@@ -15,8 +15,9 @@ pub async fn get_value(token: String, namespace: String, key: String) -> RpcResu
         let value = get_v_from_kv(namespace, key).await?;
 
         let json_str = match value {
-            Some(v) => serde_json::to_string(&v)
-                .map_err(|e| NodegetError::SerializationError(format!("Failed to serialize value: {e}")))?,
+            Some(v) => serde_json::to_string(&v).map_err(|e| {
+                NodegetError::SerializationError(format!("Failed to serialize value: {e}"))
+            })?,
             None => "null".to_string(),
         };
 

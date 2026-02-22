@@ -1,26 +1,27 @@
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// KV 存储结构体
 ///
-/// 每个 KVStore 代表一个命名空间，包含一个 HashMap 存储键值对
+/// 每个 `KVStore` 代表一个命名空间，包含一个 `HashMap` 存储键值对
 /// 其中 key 是字符串，value 是任意 JSON 值
 #[derive(Serialize, Deserialize, Clone, Default, Debug)]
 pub struct KVStore {
     /// 命名空间名称，作为唯一标识符
     namespace: String,
-    /// 存储键值对的 HashMap
+    /// 存储键值对的 `HashMap`
     kv: HashMap<String, serde_json::Value>,
 }
 
 impl KVStore {
-    /// 创建一个新的 KVStore
+    /// 创建一个新的 `KVStore`
     ///
     /// # 参数
     /// * `namespace` - 命名空间名称
     ///
     /// # 返回值
-    /// 返回一个新的 KVStore 实例
+    /// 返回一个新的 `KVStore` 实例
+    #[must_use]
     pub fn new(namespace: String) -> Self {
         Self {
             namespace,
@@ -32,6 +33,7 @@ impl KVStore {
     ///
     /// # 返回值
     /// 返回命名空间名称的引用
+    #[must_use]
     pub fn namespace(&self) -> &str {
         &self.namespace
     }
@@ -43,6 +45,7 @@ impl KVStore {
     ///
     /// # 返回值
     /// 如果 key 存在，返回 Some(&Value)，否则返回 None
+    #[must_use]
     pub fn get(&self, key: &str) -> Option<&serde_json::Value> {
         self.kv.get(key)
     }
@@ -74,6 +77,7 @@ impl KVStore {
     ///
     /// # 返回值
     /// 如果 key 存在返回 true，否则返回 false
+    #[must_use]
     pub fn contains_key(&self, key: &str) -> bool {
         self.kv.contains_key(key)
     }
@@ -82,6 +86,7 @@ impl KVStore {
     ///
     /// # 返回值
     /// 返回所有 key 的列表
+    #[must_use]
     pub fn keys(&self) -> Vec<String> {
         self.kv.keys().cloned().collect()
     }
@@ -90,6 +95,7 @@ impl KVStore {
     ///
     /// # 返回值
     /// 返回所有 value 的列表
+    #[must_use]
     pub fn values(&self) -> Vec<&serde_json::Value> {
         self.kv.values().collect()
     }
@@ -98,6 +104,7 @@ impl KVStore {
     ///
     /// # 返回值
     /// 返回键值对的数量
+    #[must_use]
     pub fn len(&self) -> usize {
         self.kv.len()
     }
@@ -106,6 +113,7 @@ impl KVStore {
     ///
     /// # 返回值
     /// 如果没有键值对返回 true，否则返回 false
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.kv.is_empty()
     }
@@ -115,19 +123,20 @@ impl KVStore {
         self.kv.clear();
     }
 
-    /// 获取内部的 HashMap 引用
+    /// 获取内部的 `HashMap` 引用
     ///
     /// # 返回值
-    /// 返回内部 HashMap 的引用
-    pub fn inner(&self) -> &HashMap<String, serde_json::Value> {
+    /// 返回内部 `HashMap` 的引用
+    #[must_use]
+    pub const fn inner(&self) -> &HashMap<String, serde_json::Value> {
         &self.kv
     }
 
-    /// 获取内部的 HashMap 可变引用
+    /// 获取内部的 `HashMap` 可变引用
     ///
     /// # 返回值
-    /// 返回内部 HashMap 的可变引用
-    pub fn inner_mut(&mut self) -> &mut HashMap<String, serde_json::Value> {
+    /// 返回内部 `HashMap` 的可变引用
+    pub const fn inner_mut(&mut self) -> &mut HashMap<String, serde_json::Value> {
         &mut self.kv
     }
 }

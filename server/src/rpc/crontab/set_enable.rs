@@ -48,7 +48,7 @@ pub async fn set_enable(token: String, name: String, enable: bool) -> RpcResult<
             .map_err(|e| NodegetError::Other(format!("Failed to set crontab enable: {e}")))?;
 
         let json_str = match result_state {
-            Some(state) => format!("{{\"success\":true,\"enabled\":{}}}", state),
+            Some(state) => format!("{{\"success\":true,\"enabled\":{state}}}"),
             None => "{\"success\":false,\"message\":\"Crontab not found\"}".to_string(),
         };
 

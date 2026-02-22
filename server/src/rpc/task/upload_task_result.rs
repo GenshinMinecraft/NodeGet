@@ -10,8 +10,8 @@ use nodeget_lib::task::{TaskEventResponse, TaskEventType};
 use sea_orm::ColumnTrait;
 use sea_orm::QueryFilter;
 use sea_orm::{ActiveModelTrait, EntityTrait, Set};
-use serde_json::value::RawValue;
 use serde_json::Value;
+use serde_json::value::RawValue;
 
 pub async fn upload_task_result(
     token: String,
@@ -30,12 +30,15 @@ pub async fn upload_task_result(
                 NodegetError::DatabaseError(format!("Database query error: {e}"))
             })?
             .ok_or_else(|| {
-                NodegetError::NotFound("Task validation failed: Invalid ID, UUID, or Token".to_owned())
+                NodegetError::NotFound(
+                    "Task validation failed: Invalid ID, UUID, or Token".to_owned(),
+                )
             })?;
 
         let original_task_type: TaskEventType =
-            serde_json::from_value(task_model.task_event_type.clone())
-                .map_err(|e| NodegetError::SerializationError(format!("Failed to parse original task type: {e}")))?;
+            serde_json::from_value(task_model.task_event_type.clone()).map_err(|e| {
+                NodegetError::SerializationError(format!("Failed to parse original task type: {e}"))
+            })?;
 
         let task_name = original_task_type.task_name();
 
@@ -50,11 +53,9 @@ pub async fn upload_task_result(
         .await?;
 
         if !is_allowed {
-            return Err(NodegetError::PermissionDenied(
-                format!(
-                    "Permission Denied: Missing Task Write ({task_name}) permission for this Agent"
-                ),
-            )
+            return Err(NodegetError::PermissionDenied(format!(
+                "Permission Denied: Missing Task Write ({task_name}) permission for this Agent"
+            ))
             .into());
         }
 

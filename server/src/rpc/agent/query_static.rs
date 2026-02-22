@@ -6,12 +6,8 @@ use futures::StreamExt;
 use jsonrpsee::core::RpcResult;
 use log::error;
 use nodeget_lib::error::NodegetError;
-use nodeget_lib::monitoring::query::{
-    QueryCondition, StaticDataQuery, StaticDataQueryField,
-};
-use nodeget_lib::permission::data_structure::{
-    Permission, Scope, StaticMonitoring,
-};
+use nodeget_lib::monitoring::query::{QueryCondition, StaticDataQuery, StaticDataQueryField};
+use nodeget_lib::permission::data_structure::{Permission, Scope, StaticMonitoring};
 use nodeget_lib::permission::token_auth::TokenOrAuth;
 use nodeget_lib::utils::error_message::anyhow_error_to_raw;
 use nodeget_lib::utils::server_json::rename_and_fix_json;
@@ -134,8 +130,10 @@ pub async fn query_static(
         Ok(result) => Ok(result),
         Err(e) => {
             let raw = anyhow_error_to_raw(&e).unwrap_or_else(|_| {
-                RawValue::from_string(r#"{"error_id":999,"error_message":"Internal error"}"#.to_string())
-                    .unwrap_or_else(|_| RawValue::from_string("null".to_string()).unwrap())
+                RawValue::from_string(
+                    r#"{"error_id":999,"error_message":"Internal error"}"#.to_string(),
+                )
+                .unwrap_or_else(|_| RawValue::from_string("null".to_string()).unwrap())
             });
             let nodeget_err = nodeget_lib::error::anyhow_to_nodeget_error(&e);
             let json_str = raw.get();
@@ -182,7 +180,10 @@ async fn execute_query(
 
                 if let Err(e) = serde_json::to_writer(&mut output_buffer, &v) {
                     error!("Serialization failed: {e}");
-                    return Err(NodegetError::SerializationError(format!("Serialization failed: {e}")).into());
+                    return Err(NodegetError::SerializationError(format!(
+                        "Serialization failed: {e}"
+                    ))
+                    .into());
                 }
             }
             Err(e) => {

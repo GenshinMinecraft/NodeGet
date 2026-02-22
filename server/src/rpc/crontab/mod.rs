@@ -32,7 +32,12 @@ pub trait Rpc {
     async fn toggle_enable(&self, token: String, name: String) -> RpcResult<Box<RawValue>>;
 
     #[method(name = "set_enable")]
-    async fn set_enable(&self, token: String, name: String, enable: bool) -> RpcResult<Box<RawValue>>;
+    async fn set_enable(
+        &self,
+        token: String,
+        name: String,
+        enable: bool,
+    ) -> RpcResult<Box<RawValue>>;
 }
 
 pub struct CrontabRpcImpl;
@@ -63,7 +68,12 @@ impl RpcServer for CrontabRpcImpl {
         toggle_enable::toggle_enable(token, name).await
     }
 
-    async fn set_enable(&self, token: String, name: String, enable: bool) -> RpcResult<Box<RawValue>> {
+    async fn set_enable(
+        &self,
+        token: String,
+        name: String,
+        enable: bool,
+    ) -> RpcResult<Box<RawValue>> {
         set_enable::set_enable(token, name, enable).await
     }
 }

@@ -18,12 +18,18 @@ CrontabResult 结构如下:
 
 ```json
 {
-  "id": 1,                          // 记录 ID
-  "cron_id": 5,                     // 关联的 Crontab ID
-  "cron_name": "cleanup_database",  // Crontab 名称
-  "run_time": 1769341269012,        // 执行时间（毫秒时间戳）
-  "success": true,                  // 是否执行成功
-  "message": "Cleaned 100 records"  // 执行结果消息
+  "id": 1,
+  // 记录 ID
+  "cron_id": 5,
+  // 关联的 Crontab ID
+  "cron_name": "cleanup_database",
+  // Crontab 名称
+  "run_time": 1769341269012,
+  // 执行时间（毫秒时间戳）
+  "success": true,
+  // 是否执行成功
+  "message": "Cleaned 100 records"
+  // 执行结果消息
 }
 ```
 
@@ -53,22 +59,37 @@ pub enum CrontabResultQueryCondition {
 
 ```json
 // 按 ID 查询
-{"id": 1}
+{
+  "id": 1
+}
 
 // 按 cron_name 查询
-{"cron_name": "cleanup_database"}
+{
+  "cron_name": "cleanup_database"
+}
 
 // 按时间范围查询
-{"run_time_from_to": [1700000000000, 1800000000000]}
+{
+  "run_time_from_to": [
+    1700000000000,
+    1800000000000
+  ]
+}
 
 // 仅查询成功的记录
-{"is_success": null}
+{
+  "is_success": null
+}
 
 // 限制返回数量
-{"limit": 100}
+{
+  "limit": 100
+}
 
 // 获取最后一条记录
-{"last": null}
+{
+  "last": null
+}
 ```
 
 多个条件并存时，为 `AND`，即只查询满足所有条件的数据
@@ -81,11 +102,25 @@ CrontabResult 的查询和删除权限仅在 `Global` Scope 下有效
 
 ```json
 {
-  "scopes": ["global"],
+  "scopes": [
+    "global"
+  ],
   "permissions": [
-    {"crontab_result": {"read": "cleanup_database"}},
-    {"crontab_result": {"read": "backup_*"}},
-    {"crontab_result": {"delete": "cleanup_database"}}
+    {
+      "crontab_result": {
+        "read": "cleanup_database"
+      }
+    },
+    {
+      "crontab_result": {
+        "read": "backup_*"
+      }
+    },
+    {
+      "crontab_result": {
+        "delete": "cleanup_database"
+      }
+    }
   ]
 }
 ```

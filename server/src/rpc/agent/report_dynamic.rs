@@ -32,7 +32,8 @@ pub async fn report_dynamic(
 
         if !is_allowed {
             return Err(NodegetError::PermissionDenied(
-                "Permission Denied: Missing DynamicMonitoring Write permission for this Agent".to_owned(),
+                "Permission Denied: Missing DynamicMonitoring Write permission for this Agent"
+                    .to_owned(),
             )
             .into());
         }

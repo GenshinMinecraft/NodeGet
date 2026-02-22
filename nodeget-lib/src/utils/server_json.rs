@@ -10,11 +10,10 @@ use serde_json::{Map, Value};
 ///
 /// 当序列化失败时返回错误
 pub fn to_raw_json<T: Serialize>(val: T) -> Result<Box<RawValue>> {
-    serde_json::value::to_raw_value(&val)
-        .map_err(|e| {
-            error!("Serialization error: {e}");
-            NodegetError::SerializationError(e.to_string()).into()
-        })
+    serde_json::value::to_raw_value(&val).map_err(|e| {
+        error!("Serialization error: {e}");
+        NodegetError::SerializationError(e.to_string()).into()
+    })
 }
 
 /// 将可序列化的值转换为原始JSON值，失败时返回错误JSON

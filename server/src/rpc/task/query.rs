@@ -187,12 +187,17 @@ pub async fn query(token: String, task_data_query: TaskDataQuery) -> RpcResult<B
 
                     if let Err(e) = serde_json::to_writer(&mut output_buffer, &v) {
                         error!("Serialization failed: {e}");
-                        return Err(NodegetError::SerializationError(format!("Serialization failed: {e}")).into());
+                        return Err(NodegetError::SerializationError(format!(
+                            "Serialization failed: {e}"
+                        ))
+                        .into());
                     }
                 }
                 Err(e) => {
                     error!("Stream read error: {e}");
-                    return Err(NodegetError::DatabaseError(format!("Stream read error: {e}")).into());
+                    return Err(
+                        NodegetError::DatabaseError(format!("Stream read error: {e}")).into(),
+                    );
                 }
             }
         }
@@ -215,10 +220,13 @@ pub async fn query(token: String, task_data_query: TaskDataQuery) -> RpcResult<B
     match process_logic.await {
         Ok(result) => Ok(result),
         Err(e) => {
-            let raw = nodeget_lib::utils::error_message::anyhow_error_to_raw(&e).unwrap_or_else(|_| {
-                RawValue::from_string(r#"{"error_id":999,"error_message":"Internal error"}"#.to_owned())
+            let raw =
+                nodeget_lib::utils::error_message::anyhow_error_to_raw(&e).unwrap_or_else(|_| {
+                    RawValue::from_string(
+                        r#"{"error_id":999,"error_message":"Internal error"}"#.to_owned(),
+                    )
                     .unwrap_or_else(|_| RawValue::from_string("null".to_owned()).unwrap())
-            });
+                });
             let nodeget_err = nodeget_lib::error::anyhow_to_nodeget_error(&e);
             let json_str = raw.get();
             Err(jsonrpsee::types::ErrorObject::owned(

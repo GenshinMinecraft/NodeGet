@@ -9,11 +9,10 @@ use uuid::Uuid;
 /// 当无法获取机器 ID 时返回错误
 pub fn get_stable_device_uuid() -> Result<Uuid> {
     use uuid::Uuid;
-    let mut machine_id = machine_uid::get()
-        .unwrap_or_else(|e| {
-            error!("无法获取系统 ID: {e}, 使用 fallback");
-            "fallback-device-id".to_string()
-        });
+    let mut machine_id = machine_uid::get().unwrap_or_else(|e| {
+        error!("无法获取系统 ID: {e}, 使用 fallback");
+        "fallback-device-id".to_string()
+    });
 
     if cfg!(feature = "for-agent") {
         machine_id.push_str("-agent");

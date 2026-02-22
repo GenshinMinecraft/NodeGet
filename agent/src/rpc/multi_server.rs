@@ -210,7 +210,9 @@ async fn connect_with_retry(
 
         retry_count += 1;
         if retry_count >= 30 {
-            return Err(NodegetError::AgentConnectionError(format!("Failed to connect to {name} after {retry_count} retries")).into());
+            return Err(NodegetError::AgentConnectionError(format!(
+                "Failed to connect to {name} after {retry_count} retries"
+            )));
         }
         let wait_secs = if retry_count < 5 { 2 } else { 5 };
         debug!("[{name}] Retry attempt {retry_count} in {wait_secs}s...");
@@ -232,11 +234,15 @@ pub async fn send_to(server_name: &str, msg: Message) -> Result<()> {
     let pool = CONNECTION_POOL
         .get()
         .ok_or_else(|| NodegetError::Other("Connection pool not initialized".to_owned()))?;
-    
+
     let pool_guard = pool.read().await;
 
     pool_guard.get(server_name).map_or_else(
-        || Err(NodegetError::Other(format!("Server not found: {server_name}"))),
+        || {
+            Err(NodegetError::Other(format!(
+                "Server not found: {server_name}"
+            )))
+        },
         |handle| {
             handle
                 .uplink_tx
@@ -260,11 +266,15 @@ pub async fn subscribe_to(server_name: &str) -> Result<broadcast::Receiver<Messa
     let pool = CONNECTION_POOL
         .get()
         .ok_or_else(|| NodegetError::Other("Connection pool not initialized".to_owned()))?;
-    
+
     let pool_guard = pool.read().await;
 
     pool_guard.get(server_name).map_or_else(
-        || Err(NodegetError::Other(format!("Server not found: {server_name}"))),
+        || {
+            Err(NodegetError::Other(format!(
+                "Server not found: {server_name}"
+            )))
+        },
         |handle| Ok(handle.downlink_tx.subscribe()),
     )
 }

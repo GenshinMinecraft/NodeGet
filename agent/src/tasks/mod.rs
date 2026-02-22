@@ -59,7 +59,7 @@ async fn execute_task(
             let url = pty::parse_url(url.clone(), task_id, task_token);
             pty::handle_pty_url(url)
                 .await
-                .map(|_| TaskEventResult::WebShell(true))
+                .map(|()| TaskEventResult::WebShell(true))
                 .map_err(|e| NodegetError::Other(format!("{e}")).into())
         }
 
@@ -89,16 +89,17 @@ pub async fn handle_task() {
             if !server.allow_task.unwrap_or(false) {
                 return;
             }
-            let mut rx: tokio::sync::broadcast::Receiver<Message> = match subscribe_to(server.name.as_str()).await {
-                Ok(rx) => {
-                    info!("[{}] Handle Task Started", server.name);
-                    rx
-                }
-                Err(e) => {
-                    error!("[{}] Handle Task Error: {}", server.name, e);
-                    return;
-                }
-            };
+            let mut rx: tokio::sync::broadcast::Receiver<Message> =
+                match subscribe_to(server.name.as_str()).await {
+                    Ok(rx) => {
+                        info!("[{}] Handle Task Started", server.name);
+                        rx
+                    }
+                    Err(e) => {
+                        error!("[{}] Handle Task Error: {}", server.name, e);
+                        return;
+                    }
+                };
 
             while let Ok(message) = rx.recv().await {
                 let server_name = server.name.clone();
@@ -121,19 +122,23 @@ pub async fn handle_task() {
 
                     let task_type = &json_rpc.params.result.task_event_type;
 
-                    let task_result: Result<TaskEventResult> = if is_task_allowed(&server_config, task_type) {
-                        execute_task(
-                            task_type,
-                            json_rpc.params.result.task_id,
-                            &json_rpc.params.result.task_token,
-                        )
-                        .await
-                    } else {
-                        Err(NodegetError::PermissionDenied("Permission Denied: Task not allowed".to_owned()).into())
-                    };
+                    let task_result: Result<TaskEventResult> =
+                        if is_task_allowed(&server_config, task_type) {
+                            execute_task(
+                                task_type,
+                                json_rpc.params.result.task_id,
+                                &json_rpc.params.result.task_token,
+                            )
+                            .await
+                        } else {
+                            Err(NodegetError::PermissionDenied(
+                                "Permission Denied: Task not allowed".to_owned(),
+                            )
+                            .into())
+                        };
 
                     let timestamp = get_local_timestamp_ms().unwrap_or(0);
-                    
+
                     let response = match task_result {
                         Ok(task_result) => TaskEventResponse {
                             task_id: json_rpc.params.result.task_id,
@@ -166,7 +171,8 @@ pub async fn handle_task() {
                         ],
                     );
 
-                    if let Err(e) = send_to(&server_name, Message::Text(Utf8Bytes::from(rpc))).await {
+                    if let Err(e) = send_to(&server_name, Message::Text(Utf8Bytes::from(rpc))).await
+                    {
                         error!("{e}");
                     }
                 });
