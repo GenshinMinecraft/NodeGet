@@ -1,6 +1,8 @@
 // Agent 连接检查模块
+mod auth;
 mod check_agent;
 
+use crate::terminal::auth::check_terminal_connect_permission;
 use crate::terminal::check_agent::check_agent;
 use axum::extract::ws::{Message, Utf8Bytes, WebSocket};
 use axum::extract::{Query, State, WebSocketUpgrade};
@@ -75,7 +77,7 @@ async fn handle_socket(socket: WebSocket, params: TerminalParams, state: Termina
     if let (Some(task_token), Some(id)) = (params.task_token, params.task_id) {
         handle_agent(socket, params.agent_uuid, task_token, id, state).await;
     } else {
-        handle_user(socket, params.agent_uuid, state).await;
+        handle_user(socket, params.agent_uuid, params.token, state).await;
     }
 }
 
@@ -181,16 +183,35 @@ async fn handle_agent(
 // # 参数
 // * `socket` - WebSocket 连接实例
 // * `agent_uuid` - Agent 的 UUID
+// * `token` - 用户令牌
 // * `state` - 终端状态
-async fn handle_user(socket: WebSocket, agent_uuid: String, state: TerminalState) {
+async fn handle_user(
+    socket: WebSocket,
+    agent_uuid: String,
+    token: Option<String>,
+    state: TerminalState,
+) {
     info!("User connecting terminal to: {agent_uuid}");
+
+    // 检查 token 是否存在
+    let token = match token {
+        Some(t) => t,
+        None => {
+            warn!("User connection rejected: missing token");
+            return;
+        }
+    };
+
+    // 检查 Terminal Connect 权限
+    if let Err(e) = check_terminal_connect_permission(&token, &agent_uuid).await {
+        warn!("User connection rejected: {e}");
+        return;
+    }
 
     // 获取会话槽位
     let (tx_to_agent, rx_from_agent) = {
         let mut sessions = state.sessions.write().await;
         if let Some(slots) = sessions.get_mut(&agent_uuid) {
-            // TODO 校验 user token
-
             if let Some(rx) = slots.rx_from_agent.take() {
                 (slots.tx_to_agent.clone(), rx)
             } else {

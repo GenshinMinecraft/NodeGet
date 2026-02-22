@@ -56,6 +56,9 @@ pub enum Permission {
 
     // Kv 权限
     Kv(Kv),
+
+    // Terminal 权限
+    Terminal(Terminal),
 }
 
 // 静态监控权限枚举
@@ -111,4 +114,11 @@ pub enum Kv {
     Read(String),
     Write(String),
     Delete(String),
+}
+
+// Terminal 权限枚举
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Terminal {
+    Connect
 }
