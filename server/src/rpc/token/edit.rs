@@ -1,0 +1,91 @@
+use crate::DB;
+use crate::entity::token;
+use crate::token::super_token::check_super_token;
+use jsonrpsee::core::RpcResult;
+use nodeget_lib::error::NodegetError;
+use nodeget_lib::permission::data_structure::Limit;
+use nodeget_lib::permission::token_auth::TokenOrAuth;
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
+use serde_json::value::RawValue;
+
+pub async fn edit(
+    token_input: String,
+    target_token: String,
+    limit: Vec<Limit>,
+) -> RpcResult<Box<RawValue>> {
+    let process_logic = async {
+        let token_or_auth = TokenOrAuth::from_full_token(&token_input)
+            .map_err(|e| NodegetError::ParseError(format!("Failed to parse token: {e}")))?;
+
+        let is_super_token = check_super_token(&token_or_auth)
+            .await
+            .map_err(|e| NodegetError::PermissionDenied(format!("{e}")))?;
+
+        if !is_super_token {
+            return Err(NodegetError::PermissionDenied(
+                "Only SuperToken can edit token limits".to_owned(),
+            )
+            .into());
+        }
+
+        let db = DB.get().ok_or_else(|| {
+            NodegetError::ConfigNotFound("Database connection not initialized".to_owned())
+        })?;
+
+        let model = if let Some(model) = token::Entity::find()
+            .filter(token::Column::TokenKey.eq(&target_token))
+            .one(db)
+            .await
+            .map_err(|e| NodegetError::DatabaseError(format!("Database query error: {e}")))?
+        {
+            model
+        } else if let Some(model) = token::Entity::find()
+            .filter(token::Column::Username.eq(&target_token))
+            .one(db)
+            .await
+            .map_err(|e| NodegetError::DatabaseError(format!("Database query error: {e}")))?
+        {
+            model
+        } else {
+            return Err(
+                NodegetError::NotFound(format!("Token not found by key/username: {target_token}"))
+                    .into(),
+            );
+        };
+
+        let mut active_model: token::ActiveModel = model.into();
+        active_model.token_limit = Set(serde_json::to_value(limit).map_err(|e| {
+            NodegetError::SerializationError(format!("Failed to serialize token limit: {e}"))
+        })?);
+
+        let updated = active_model
+            .update(db)
+            .await
+            .map_err(|e| NodegetError::DatabaseError(format!("Database update error: {e}")))?;
+
+        let response = serde_json::json!({
+            "success": true,
+            "id": updated.id,
+            "token_key": updated.token_key
+        });
+
+        let json_str = serde_json::to_string(&response).map_err(|e| {
+            NodegetError::SerializationError(format!("Failed to serialize response: {e}"))
+        })?;
+
+        RawValue::from_string(json_str)
+            .map_err(|e| NodegetError::SerializationError(e.to_string()).into())
+    };
+
+    match process_logic.await {
+        Ok(result) => Ok(result),
+        Err(e) => {
+            let nodeget_err = nodeget_lib::error::anyhow_to_nodeget_error(&e);
+            Err(jsonrpsee::types::ErrorObject::owned(
+                nodeget_err.error_code() as i32,
+                format!("{nodeget_err}"),
+                None::<()>,
+            ))
+        }
+    }
+}

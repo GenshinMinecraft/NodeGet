@@ -1,49 +1,49 @@
-# Token 总览
+﻿# Token 鎬昏
 
-Token 是本项目的鉴权核心，任何有权限的操作都应持有 有对应权限的 Token
+Token 鏄湰椤圭洰鐨勯壌鏉冩牳蹇冿紝浠讳綍鏈夋潈闄愮殑鎿嶄綔閮藉簲鎸佹湁 鏈夊搴旀潈闄愮殑 Token
 
-## Token 分类
+## Token 鍒嗙被
 
-在本项目，Token 可以分为两类
+鍦ㄦ湰椤圭洰锛孴oken 鍙互鍒嗕负涓ょ被
 
-- SuperToken: 在 Server 初始化时创建的唯一值，数据库 ID 为 1 的 Token，在所有操作中该 Token 直接放行
-- Token: 由 SuperToken 创建的子 Token
+- SuperToken: 鍦?Server 鍒濆鍖栨椂鍒涘缓鐨勫敮涓€鍊硷紝鏁版嵁搴?ID 涓?1 鐨?Token锛屽湪鎵€鏈夋搷浣滀腑璇?Token 鐩存帴鏀捐
+- Token: 鐢?SuperToken 鍒涘缓鐨勫瓙 Token
 
-Token 可以是下列值:
+Token 鍙互鏄笅鍒楀€?
 
-- `TOKEN_KEY:TOKEN_SECRET`: Token Key 明文储存，Token Secret 为主要鉴权部分
-- `Username|Password`: Username 明文储存，Password 为主要鉴权部分
+- `TOKEN_KEY:TOKEN_SECRET`: Token Key 鏄庢枃鍌ㄥ瓨锛孴oken Secret 涓轰富瑕侀壌鏉冮儴鍒?
+- `Username|Password`: Username 鏄庢枃鍌ㄥ瓨锛孭assword 涓轰富瑕侀壌鏉冮儴鍒?
 
-区别位于分隔符不同，在 Username+Password 方案中，只取第一个分隔符 `|`，后面作为 Password
+鍖哄埆浣嶄簬鍒嗛殧绗︿笉鍚岋紝鍦?Username+Password 鏂规涓紝鍙彇绗竴涓垎闅旂 `|`锛屽悗闈綔涓?Password
 
-特点:
+鐗圭偣:
 
-- Token 与 Username+Password 等价，但 Server 内部鉴权只有 Token。在任何 API 中两种形式均可
-- Token 与 Username 一一对应，SuperToken 对应的 Username 为 root
-- Token 不可变且不可指定，但 Username+Password 可以自行更改
+- Token 涓?Username+Password 绛変环锛屼絾 Server 鍐呴儴閴存潈鍙湁 Token銆傚湪浠讳綍 API 涓袱绉嶅舰寮忓潎鍙?
+- Token 涓?Username 涓€涓€瀵瑰簲锛孲uperToken 瀵瑰簲鐨?Username 涓?root
+- Token 涓嶅彲鍙樹笖涓嶅彲鎸囧畾锛屼絾 Username+Password 鍙互鑷鏇存敼
 
-## 基本结构
+## 鍩烘湰缁撴瀯
 
-一个 Token 对应如下结构体:
+涓€涓?Token 瀵瑰簲濡備笅缁撴瀯浣?
 
 ```rust
 pub struct Token {
-    pub version: u8, // 暂时为 1
-    pub token_key: String, // 标识 Token 最主要的键
-    pub timestamp_from: Option<i64>, // Token 有效期，毫秒时间戳
+    pub version: u8, // 鏆傛椂涓?1
+    pub token_key: String, // 鏍囪瘑 Token 鏈€涓昏鐨勯敭
+    pub timestamp_from: Option<i64>, // Token 鏈夋晥鏈燂紝姣鏃堕棿鎴?
     pub timestamp_to: Option<i64>,
-    pub token_limit: Vec<Limit>, // 权限范围
-    pub username: Option<String>, // 用户名
+    pub token_limit: Vec<Limit>, // 鏉冮檺鑼冨洿
+    pub username: Option<String>, // 鐢ㄦ埛鍚?
 }
 ```
 
-Token Secret 与 Password 存于数据库中，无反向解析
+Token Secret 涓?Password 瀛樹簬鏁版嵁搴撲腑锛屾棤鍙嶅悜瑙ｆ瀽
 
-一个 Token 可以对应多个 Limit，在不同的作用域 (Scope) 下有不同的权限 (Permission)
+涓€涓?Token 鍙互瀵瑰簲澶氫釜 Limit锛屽湪涓嶅悓鐨勪綔鐢ㄥ煙 (Scope) 涓嬫湁涓嶅悓鐨勬潈闄?(Permission)
 
 ### Limit
 
-一个 Limit 对应多个 Scope 与 Permission
+涓€涓?Limit 瀵瑰簲澶氫釜 Scope 涓?Permission
 
 ```rust
 pub struct Limit {
@@ -54,15 +54,15 @@ pub struct Limit {
 
 ### Scope
 
-Scope 为作用域，即表示在某一个对象 (目前为 Agent Uuid) 有权限
+Scope 涓轰綔鐢ㄥ煙锛屽嵆琛ㄧず鍦ㄦ煇涓€涓璞?(鐩墠涓?Agent Uuid) 鏈夋潈闄?
 
 ```rust
 pub enum Scope {
-    // 全局作用域，适用于所有地点
+    // 鍏ㄥ眬浣滅敤鍩燂紝閫傜敤浜庢墍鏈夊湴鐐?
     Global,
-    // 特定 Agent 作用域，通过 UUID 指定
+    // 鐗瑰畾 Agent 浣滅敤鍩燂紝閫氳繃 UUID 鎸囧畾
     AgentUuid(uuid::Uuid),
-    // KvNamespace 作用域，通过名称指定
+    // KvNamespace 浣滅敤鍩燂紝閫氳繃鍚嶇О鎸囧畾
     KvNamespace(String),
 }
 ```
@@ -70,136 +70,136 @@ pub enum Scope {
 ### Permission
 
 ```rust
-// 权限枚举，定义不同类型的操作权限
+// 鏉冮檺鏋氫妇锛屽畾涔変笉鍚岀被鍨嬬殑鎿嶄綔鏉冮檺
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Permission {
-    // 静态监控权限
+    // 闈欐€佺洃鎺ф潈闄?
     StaticMonitoring(StaticMonitoring),
-    // 动态监控权限
+    // 鍔ㄦ€佺洃鎺ф潈闄?
     DynamicMonitoring(DynamicMonitoring),
-    // 任务权限
+    // 浠诲姟鏉冮檺
     Task(Task),
-    // Crontab 权限
+    // Crontab 鏉冮檺
     Crontab(Crontab),
 
-    // Kv 权限
+    // Kv 鏉冮檺
     Kv(Kv),
 
-    // Terminal 权限
+    // Terminal 鏉冮檺
     Terminal(Terminal),
 
-    // CrontabResult 权限
+    // CrontabResult 鏉冮檺
     CrontabResult(CrontabResult),
     
-    // NodeGet 权限
+    // NodeGet 鏉冮檺
     NodeGet(NodeGet),
 }
 
-// 静态监控权限枚举
+// 闈欐€佺洃鎺ф潈闄愭灇涓?
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StaticMonitoring {
-    // 读取权限，指定可读取的字段类型
+    // 璇诲彇鏉冮檺锛屾寚瀹氬彲璇诲彇鐨勫瓧娈电被鍨?
     Read(StaticDataQueryField),
-    // 写入权限
+    // 鍐欏叆鏉冮檺
     Write,
 }
 
-// 动态监控权限枚举
+// 鍔ㄦ€佺洃鎺ф潈闄愭灇涓?
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DynamicMonitoring {
-    // 读取权限，指定可读取的字段类型
+    // 璇诲彇鏉冮檺锛屾寚瀹氬彲璇诲彇鐨勫瓧娈电被鍨?
     Read(DynamicDataQueryField),
-    // 写入权限
+    // 鍐欏叆鏉冮檺
     Write,
 }
 
-// 任务权限枚举
-// Type 字段名
-// 接受 ping / tcp_ping / http_ping / web_shell / execute / ip
+// 浠诲姟鏉冮檺鏋氫妇
+// Type 瀛楁鍚?
+// 鎺ュ彈 ping / tcp_ping / http_ping / web_shell / execute / ip
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Task {
-    // 创建权限，指定任务类型
+    // 鍒涘缓鏉冮檺锛屾寚瀹氫换鍔＄被鍨?
     Create(String),
-    // 读取权限，指定任务类型
+    // 璇诲彇鏉冮檺锛屾寚瀹氫换鍔＄被鍨?
     Read(String),
-    // 写入权限，指定任务类型
+    // 鍐欏叆鏉冮檺锛屾寚瀹氫换鍔＄被鍨?
     Write(String),
-    // 监听权限
+    // 鐩戝惉鏉冮檺
     Listen,
 }
 
-// Crontab 权限枚举
+// Crontab 鏉冮檺鏋氫妇
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Crontab {
-    // 可以读取在自己 Scope 下的所有 Crontab
+    // 鍙互璇诲彇鍦ㄨ嚜宸?Scope 涓嬬殑鎵€鏈?Crontab
     Read,
-    // 可以创建 Crontab
-    // 若 Crontab 类型为下发给 Agent 任务，则该 Token 还必须拥有对应 Agent 的 Task Create 权限
-    // 若 Crontab 类型为 Server 任务，则 Scope 必须为 Global，否则无效
+    // 鍙互鍒涘缓 Crontab
+    // 鑻?Crontab 绫诲瀷涓轰笅鍙戠粰 Agent 浠诲姟锛屽垯璇?Token 杩樺繀椤绘嫢鏈夊搴?Agent 鐨?Task Create 鏉冮檺
+    // 鑻?Crontab 绫诲瀷涓?Server 浠诲姟锛屽垯 Scope 蹇呴』涓?Global锛屽惁鍒欐棤鏁?
     Write,
-    // 删除 Crontab
+    // 鍒犻櫎 Crontab
     Delete,
 }
 
-// CrontabResult 权限枚举
-// 注意：该权限仅在 Global Scope 下有效
+// CrontabResult 鏉冮檺鏋氫妇
+// 娉ㄦ剰锛氳鏉冮檺浠呭湪 Global Scope 涓嬫湁鏁?
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CrontabResult {
-    // 读取权限，指定可读取的 cron_name
+    // 璇诲彇鏉冮檺锛屾寚瀹氬彲璇诲彇鐨?cron_name
     Read(String),
-    // 删除权限，指定可删除的 cron_name
+    // 鍒犻櫎鏉冮檺锛屾寚瀹氬彲鍒犻櫎鐨?cron_name
     Delete(String),
 }
 
-// Kv 权限枚举
-// 注意：该权限仅在 Global 或 KvNamespace Scope 下有效
+// Kv 鏉冮檺鏋氫妇
+// 娉ㄦ剰锛氳鏉冮檺浠呭湪 Global 鎴?KvNamespace Scope 涓嬫湁鏁?
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Kv {
-    // 列出该 Namespace 下所有键
+    // 鍒楀嚭璇?Namespace 涓嬫墍鏈夐敭
     ListAllKeys,
-    // 下面为 KV 数据库的 CRUD 操作
-    // Write 在遇到同名 Key 会覆盖操作
-    // 可以拥有通配符，比如 `metadata_*`，表达可以操作 这一 KvNamespace Scope 下的所有以 `metadata_` 开头的键
+    // 涓嬮潰涓?KV 鏁版嵁搴撶殑 CRUD 鎿嶄綔
+    // Write 鍦ㄩ亣鍒板悓鍚?Key 浼氳鐩栨搷浣?
+    // 鍙互鎷ユ湁閫氶厤绗︼紝姣斿 `metadata_*`锛岃〃杈惧彲浠ユ搷浣?杩欎竴 KvNamespace Scope 涓嬬殑鎵€鏈変互 `metadata_` 寮€澶寸殑閿?
     Read(String),
     Write(String),
     Delete(String),
 }
 
-// Terminal 权限枚举
+// Terminal 鏉冮檺鏋氫妇
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Terminal {
-    // 在 Agent Uuid 下拥有该权限，表明可以通过该 Token 连接到该 Agent 的 Terminal
-    // Global Scope 下可以连接到所有的 Agent
-    // 注意：此处只是连接，而不是创建或主动让 Agent 连接
+    // 鍦?Agent Uuid 涓嬫嫢鏈夎鏉冮檺锛岃〃鏄庡彲浠ラ€氳繃璇?Token 杩炴帴鍒拌 Agent 鐨?Terminal
+    // Global Scope 涓嬪彲浠ヨ繛鎺ュ埌鎵€鏈夌殑 Agent
+    // 娉ㄦ剰锛氭澶勫彧鏄繛鎺ワ紝鑰屼笉鏄垱寤烘垨涓诲姩璁?Agent 杩炴帴
     Connect,
 }
 
-// NodeGet 权限枚举
-// 注意：该权限仅在 Global Scope 下有效
+// NodeGet 鏉冮檺鏋氫妇
+// 娉ㄦ剰锛氳鏉冮檺浠呭湪 Global Scope 涓嬫湁鏁?
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum NodeGet {
-    // 列出所有 Agent Uuid
+    // 鍒楀嚭鎵€鏈?Agent Uuid
     ListAllAgentUuid,
 }
 
 ```
 
-若存在于 Limit 的 permissions 中，即为拥有该权限
+鑻ュ瓨鍦ㄤ簬 Limit 鐨?permissions 涓紝鍗充负鎷ユ湁璇ユ潈闄?
 
 ## Demo
 
-### Agent 基础
+### Agent 鍩虹
 
-现有这么一个结构体
+鐜版湁杩欎箞涓€涓粨鏋勪綋
 
 ```json
 {
@@ -255,14 +255,14 @@ pub enum NodeGet {
 }
 ```
 
-这是一个 Agent 能正常调用所有功能的 Limit，它表示:
+杩欐槸涓€涓?Agent 鑳芥甯歌皟鐢ㄦ墍鏈夊姛鑳界殑 Limit锛屽畠琛ㄧず:
 
-Agent Uuid 为 `ad..af` 与 `33..5c` 的 Agent，具有上传 StaticMonitoring / DynamicMonitoring 数据、监听 Server 下发
-Task、上报目前所有 Task 任务类型 的权限
+Agent Uuid 涓?`ad..af` 涓?`33..5c` 鐨?Agent锛屽叿鏈変笂浼?StaticMonitoring / DynamicMonitoring 鏁版嵁銆佺洃鍚?Server 涓嬪彂
+Task銆佷笂鎶ョ洰鍓嶆墍鏈?Task 浠诲姟绫诲瀷 鐨勬潈闄?
 
-### 查询 基础
+### 鏌ヨ 鍩虹
 
-现有这么一个结构体
+鐜版湁杩欎箞涓€涓粨鏋勪綋
 
 ```json
 {
@@ -299,13 +299,13 @@ Task、上报目前所有 Task 任务类型 的权限
 }
 ```
 
-它表示:
+瀹冭〃绀?
 
-用户可以查询 Agent Uuid 为 `ad..af` 与 `33..5c` 的 Agent 的 StaticMonitoring / DynamicMonitoring Data 中 cpu / system 字段
+鐢ㄦ埛鍙互鏌ヨ Agent Uuid 涓?`ad..af` 涓?`33..5c` 鐨?Agent 鐨?StaticMonitoring / DynamicMonitoring Data 涓?cpu / system 瀛楁
 
-### Crontab 权限示例
+### Crontab 鏉冮檺绀轰緥
 
-现有这么一个结构体
+鐜版湁杩欎箞涓€涓粨鏋勪綋
 
 ```json
 {
@@ -328,11 +328,11 @@ Task、上报目前所有 Task 任务类型 的权限
 }
 ```
 
-这是一个具有全局 Crontab 权限的 Limit，它表示:
+杩欐槸涓€涓叿鏈夊叏灞€ Crontab 鏉冮檺鐨?Limit锛屽畠琛ㄧず:
 
-具有对所有 Crontab 的读取、写入和删除权限。
+鍏锋湁瀵规墍鏈?Crontab 鐨勮鍙栥€佸啓鍏ュ拰鍒犻櫎鏉冮檺銆?
 
-或针对特定 Agent 的权限:
+鎴栭拡瀵圭壒瀹?Agent 鐨勬潈闄?
 
 ```json
 {
@@ -355,7 +355,17 @@ Task、上报目前所有 Task 任务类型 的权限
 }
 ```
 
-这表示:
+杩欒〃绀?
 
-对 UUID 为 `00000000-0000-0000-0000-000000000001` 和 `00000000-0000-0000-0000-000000000002` 的 Agent 相关的 Crontab
-具有读取和写入权限。
+瀵?UUID 涓?`00000000-0000-0000-0000-000000000001` 鍜?`00000000-0000-0000-0000-000000000002` 鐨?Agent 鐩稿叧鐨?Crontab
+鍏锋湁璇诲彇鍜屽啓鍏ユ潈闄愩€?
+
+## Token API 鏂规硶
+
+- [鍒涘缓 Token](./create.md)
+- [鑾峰彇 Token 璇︽儏](./get.md)
+- [鍒犻櫎 Token](./delete.md)
+- [鍒楀嚭鎵€鏈?Token](./list_all_tokens.md)
+- [编辑 Token 权限](./edit.md)
+
+

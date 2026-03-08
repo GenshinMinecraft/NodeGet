@@ -5,7 +5,7 @@ use nodeget_lib::error::NodegetError;
 use nodeget_lib::permission::token_auth::TokenOrAuth;
 use serde_json::value::RawValue;
 
-pub async fn delete(token: String, target_token_key: Option<String>) -> RpcResult<Box<RawValue>> {
+pub async fn delete(token: String, target_token: Option<String>) -> RpcResult<Box<RawValue>> {
     let process_logic = async {
         let token_or_auth = TokenOrAuth::from_full_token(&token)
             .map_err(|e| NodegetError::ParseError(format!("Failed to parse token: {e}")))?;
@@ -21,26 +21,37 @@ pub async fn delete(token: String, target_token_key: Option<String>) -> RpcResul
             .into());
         }
 
-        let Some(target_key_to_delete) = target_token_key else {
+        let Some(target_token_to_delete) = target_token else {
             return Err(NodegetError::PermissionDenied(
-                "Target token key is required for SuperToken deletion".to_string(),
+                "Target token (key/username) is required for SuperToken deletion".to_string(),
             )
             .into());
         };
 
-        let delete_result = token::delete_token_by_key(target_key_to_delete.clone())
+        let delete_result_by_key = token::delete_token_by_key(target_token_to_delete.clone())
             .await
             .map_err(|e| NodegetError::DatabaseError(e.to_string()))?;
 
-        let json_str = if delete_result.rows_affected > 0 {
+        let json_str = if delete_result_by_key.rows_affected > 0 {
             format!(
-                "{{\"success\":true,\"message\":\"Token {} deleted successfully by SuperToken\",\"rows_affected\":{}}}",
-                target_key_to_delete, delete_result.rows_affected
+                "{{\"success\":true,\"message\":\"Token {} deleted successfully by SuperToken\",\"rows_affected\":{},\"matched_by\":\"token_key\"}}",
+                target_token_to_delete, delete_result_by_key.rows_affected
             )
         } else {
-            format!(
-                "{{\"success\":false,\"message\":\"Token {target_key_to_delete} not found\"}}"
-            )
+            let delete_result_by_username = token::delete_token_by_username(target_token_to_delete.clone())
+                .await
+                .map_err(|e| NodegetError::DatabaseError(e.to_string()))?;
+
+            if delete_result_by_username.rows_affected > 0 {
+                format!(
+                    "{{\"success\":true,\"message\":\"Token {} deleted successfully by SuperToken\",\"rows_affected\":{},\"matched_by\":\"username\"}}",
+                    target_token_to_delete, delete_result_by_username.rows_affected
+                )
+            } else {
+                format!(
+                    "{{\"success\":false,\"message\":\"Token {target_token_to_delete} not found\"}}"
+                )
+            }
         };
 
         RawValue::from_string(json_str)

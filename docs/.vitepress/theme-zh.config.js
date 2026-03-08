@@ -146,6 +146,14 @@ export const themeZhConfig = {
 					link: '/api/token/get.md'
 				},
 				{
+					text: '列出所有 Token',
+					link: '/api/token/list_all_tokens.md'
+				},
+				{
+					text: '编辑 Token 权限',
+					link: '/api/token/edit.md'
+				},
+				{
 					text: '删除 Token',
 					link: '/api/token/delete.md'
 				}]

@@ -9,6 +9,7 @@ use nodeget_lib::utils::get_local_timestamp_ms_i64;
 use sea_orm::ColumnTrait;
 use sea_orm::EntityTrait;
 use sea_orm::QueryFilter;
+use serde_json::Value;
 
 // 根据令牌或认证信息获取令牌详细信息
 //
@@ -63,9 +64,7 @@ pub async fn get_token(token_or_auth: &TokenOrAuth) -> anyhow::Result<Token> {
         }
     };
 
-    let token_limit: Vec<Limit> = serde_json::from_value(token_model.token_limit).map_err(|e| {
-        NodegetError::SerializationError(format!("Failed to parse token permissions: {e}"))
-    })?;
+    let token_limit = parse_token_limit_with_compat(token_model.token_limit)?;
 
     Ok(Token {
         version: token_model.version,
@@ -75,6 +74,37 @@ pub async fn get_token(token_or_auth: &TokenOrAuth) -> anyhow::Result<Token> {
         token_limit,
         username: token_model.username,
     })
+}
+
+fn drop_unknown_permissions(mut token_limit_value: Value) -> Value {
+    let Some(limits) = token_limit_value.as_array_mut() else {
+        return token_limit_value;
+    };
+
+    for limit in limits.iter_mut() {
+        let Some(perms) = limit.get_mut("permissions").and_then(Value::as_array_mut) else {
+            continue;
+        };
+
+        perms.retain(|perm| serde_json::from_value::<Permission>(perm.clone()).is_ok());
+    }
+
+    token_limit_value
+}
+
+pub(crate) fn parse_token_limit_with_compat(token_limit_value: Value) -> anyhow::Result<Vec<Limit>> {
+    match serde_json::from_value::<Vec<Limit>>(token_limit_value.clone()) {
+        Ok(v) => Ok(v),
+        Err(original_err) => {
+            let filtered = drop_unknown_permissions(token_limit_value);
+            serde_json::from_value::<Vec<Limit>>(filtered).map_err(|e| {
+                NodegetError::SerializationError(format!(
+                    "Failed to parse token permissions: {e}; original error: {original_err}"
+                ))
+                .into()
+            })
+        }
+    }
 }
 
 // 检查令牌是否有足够的权限执行特定操作

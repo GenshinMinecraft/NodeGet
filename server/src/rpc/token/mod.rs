@@ -1,12 +1,15 @@
 use jsonrpsee::core::RpcResult;
 use jsonrpsee::proc_macros::rpc;
 use migration::async_trait::async_trait;
+use nodeget_lib::permission::data_structure::Limit;
 use nodeget_lib::permission::create::TokenCreationRequest;
 use serde_json::value::RawValue;
 
 mod create;
 mod delete;
+mod edit;
 mod get;
+mod list_all_tokens;
 
 #[rpc(server, namespace = "token")]
 pub trait Rpc {
@@ -24,7 +27,18 @@ pub trait Rpc {
     async fn delete(
         &self,
         token: String,
-        target_token_key: Option<String>,
+        target_token: Option<String>,
+    ) -> RpcResult<Box<RawValue>>;
+
+    #[method(name = "list_all_tokens")]
+    async fn list_all_tokens(&self, token: String) -> RpcResult<Box<RawValue>>;
+
+    #[method(name = "edit")]
+    async fn edit(
+        &self,
+        token: String,
+        target_token: String,
+        limit: Vec<Limit>,
     ) -> RpcResult<Box<RawValue>>;
 }
 
@@ -47,8 +61,21 @@ impl RpcServer for TokenRpcImpl {
     async fn delete(
         &self,
         token: String,
-        target_token_key: Option<String>,
+        target_token: Option<String>,
     ) -> RpcResult<Box<RawValue>> {
-        delete::delete(token, target_token_key).await
+        delete::delete(token, target_token).await
+    }
+
+    async fn list_all_tokens(&self, token: String) -> RpcResult<Box<RawValue>> {
+        list_all_tokens::list_all_tokens(token).await
+    }
+
+    async fn edit(
+        &self,
+        token: String,
+        target_token: String,
+        limit: Vec<Limit>,
+    ) -> RpcResult<Box<RawValue>> {
+        edit::edit(token, target_token, limit).await
     }
 }
