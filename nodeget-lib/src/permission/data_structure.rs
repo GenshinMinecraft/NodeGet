@@ -142,7 +142,8 @@ pub enum Terminal {
 }
 
 // NodeGet 权限枚举
-// 注意：该权限仅在 Global Scope 下有效
+// 在 Global Scope 下可列出系统内全部 Agent UUID
+// 在 AgentUuid Scope 下可列出对应范围内的 Agent UUID（仍需方法层校验）
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum NodeGet {
