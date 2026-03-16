@@ -1,6 +1,6 @@
 use crate::rpc::multi_server::{send_to, subscribe_to};
 use crate::rpc::{JsonRpcTask, wrap_json_into_rpc_with_id_1};
-use crate::{AGENT_CONFIG, RELOAD_NOTIFY};
+use crate::{AGENT_ARGS, AGENT_CONFIG, RELOAD_NOTIFY};
 use log::{error, info};
 use nodeget_lib::config::agent::AgentConfig;
 use nodeget_lib::error::NodegetError;
@@ -87,7 +87,7 @@ async fn execute_task(
                 }
             };
 
-            fs::write("./config.toml", config_string)
+            fs::write(AGENT_ARGS.get().unwrap().config.clone(), config_string)
                 .await
                 .map_err(|e| NodegetError::Other(format!("Failed to write config.toml: {e}")))?;
 

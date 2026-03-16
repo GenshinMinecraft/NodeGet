@@ -23,11 +23,13 @@ use std::str::FromStr;
 use std::sync::{OnceLock, RwLock};
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
+use nodeget_lib::args_parse::agent::AgentArgs;
 
 mod monitoring;
 mod rpc;
 mod tasks;
 
+static AGENT_ARGS: OnceLock<AgentArgs> = OnceLock::new();
 static AGENT_CONFIG: OnceLock<RwLock<AgentConfig>> = OnceLock::new();
 pub(crate) static RELOAD_NOTIFY: OnceLock<Notify> = OnceLock::new();
 
@@ -66,11 +68,14 @@ fn abort_handles(handles: &mut Vec<JoinHandle<()>>) {
 async fn main() -> anyhow::Result<()> {
     println!("Starting nodeget-agent");
 
+    let args = AgentArgs::par();
+    AGENT_ARGS.set(args.clone()).unwrap();
+
     RELOAD_NOTIFY.get_or_init(Notify::new);
     let mut logger_initialized = false;
 
     loop {
-        let config = AgentConfig::get_and_parse_config("./config.toml")
+        let config = AgentConfig::get_and_parse_config(AGENT_ARGS.get().unwrap().config.clone())
             .await
             .map_err(|e| NodegetError::ConfigNotFound(format!("Failed to load config: {e}")))?;
 

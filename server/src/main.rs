@@ -12,8 +12,9 @@
 use axum::routing::any;
 use log::info;
 use std::str::FromStr;
+use std::sync::OnceLock;
 use tower::Service;
-
+use nodeget_lib::args_parse::server::ServerArgs;
 use crate::crontab::init_crontab_worker;
 use crate::rpc::get_modules;
 use crate::token::super_token::generate_super_token;
@@ -40,6 +41,9 @@ mod token;
 // 全局数据库连接单例
 pub static DB: tokio::sync::OnceCell<sea_orm::DatabaseConnection> =
     tokio::sync::OnceCell::const_new();
+
+static SERVER_ARGS: OnceLock<ServerArgs> = OnceLock::new();
+
 // 全局服务器配置单例
 static SERVER_CONFIG: std::sync::OnceLock<nodeget_lib::config::server::ServerConfig> =
     std::sync::OnceLock::new();
@@ -51,6 +55,9 @@ static SERVER_CONFIG: std::sync::OnceLock<nodeget_lib::config::server::ServerCon
 #[tokio::main]
 async fn main() {
     println!("Starting nodeget-server");
+
+    let args = ServerArgs::par();
+    SERVER_ARGS.set(args.clone()).unwrap();
 
     // Config Parse
     let config = nodeget_lib::config::server::ServerConfig::get_and_parse_config("./config.toml")
