@@ -15,9 +15,6 @@ pub struct ServerConfig {
     // WebSocket 监听地址
     pub ws_listener: String,
 
-    // WebSocket 外部访问地址
-    pub ws_host_url: String,
-
     // 数据库配置
     pub database: DatabaseConfig,
 }

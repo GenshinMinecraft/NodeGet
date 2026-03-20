@@ -9,9 +9,6 @@ ws_listener = "0.0.0.0:3000"
 # 如果不是 auto_gen，请自行确保 Uuid 唯一，否则可能导致数据混乱或 UB
 server_uuid = "auto_gen"
 
-# WebSocket 的 Host URL，建议指定为公网具有 WebSocket 访问性的地址，与 Web Shell 下发等有关
-ws_host_url = "ws://localhost:3000"
-
 # 数据库配置
 [database]
 
