@@ -29,30 +29,6 @@ pub async fn delete_crontab_by_name(name: String) -> Result<bool, sea_orm::DbErr
         .map(|result| result.rows_affected > 0)
 }
 
-pub async fn toggle_crontab_enable_by_name(name: String) -> Result<Option<bool>, sea_orm::DbErr> {
-    let db = DB.get().ok_or_else(|| {
-        sea_orm::DbErr::Conn(sea_orm::RuntimeErr::Internal(
-            "Database not initialized".to_string(),
-        ))
-    })?;
-
-    let crontab_option = crontab::Entity::find()
-        .filter(crontab::Column::Name.eq(&name))
-        .one(db)
-        .await?;
-
-    match crontab_option {
-        Some(mut model) => {
-            let new_enable = !model.enable;
-            model.enable = new_enable;
-            let active_model: crontab::ActiveModel = model.into();
-            active_model.update(db).await?;
-            Ok(Some(new_enable))
-        }
-        None => Ok(None),
-    }
-}
-
 pub async fn set_crontab_enable_by_name(
     name: String,
     enable: bool,
@@ -137,8 +113,11 @@ async fn process_crontab() {
 
         info!("Triggering cron job: {} ({})", job.name, job.id);
 
-        let mut active_model: crontab::ActiveModel = job.clone().into();
-        active_model.last_run_time = Set(Some(now.timestamp_millis()));
+        let active_model = crontab::ActiveModel {
+            id: Set(job.id),
+            last_run_time: Set(Some(now.timestamp_millis())),
+            ..Default::default()
+        };
         if let Err(e) = active_model.update(db).await {
             error!("Failed to update last_run_time for job {}: {}", job.id, e);
             continue;

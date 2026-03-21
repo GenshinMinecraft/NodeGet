@@ -24,7 +24,7 @@ pub enum Crontab {
 ### 权限说明
 
 - **Read**: 允许读取 Crontab 列表
-- **Write**: 允许创建/修改/切换/设置 Crontab 的启用状态
+- **Write**: 允许创建/修改/设置 Crontab 的启用状态
 - **Delete**: 允许删除 Crontab
 
 ### 作用域限制
@@ -74,7 +74,7 @@ Crontab 支持以下操作：
 
 ## 权限覆盖规则
 
-对于写入类操作（编辑、删除、切换启用、设置启用）：
+对于写入类操作（编辑、删除、设置启用）：
 
 - 服务端会先读取目标 Crontab 内容
 - 再按该 Crontab 的 `cron_type` 展开的全部 Scope 做权限校验

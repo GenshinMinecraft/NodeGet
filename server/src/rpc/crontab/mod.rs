@@ -11,7 +11,6 @@ mod delete;
 mod edit;
 mod get;
 mod set_enable;
-mod toggle_enable;
 
 #[rpc(server, namespace = "crontab")]
 pub trait Rpc {
@@ -38,9 +37,6 @@ pub trait Rpc {
 
     #[method(name = "delete")]
     async fn delete(&self, token: String, name: String) -> RpcResult<Box<RawValue>>;
-
-    #[method(name = "toggle_enable")]
-    async fn toggle_enable(&self, token: String, name: String) -> RpcResult<Box<RawValue>>;
 
     #[method(name = "set_enable")]
     async fn set_enable(
@@ -83,10 +79,6 @@ impl RpcServer for CrontabRpcImpl {
 
     async fn delete(&self, token: String, name: String) -> RpcResult<Box<RawValue>> {
         delete::delete(token, name).await
-    }
-
-    async fn toggle_enable(&self, token: String, name: String) -> RpcResult<Box<RawValue>> {
-        toggle_enable::toggle_enable(token, name).await
     }
 
     async fn set_enable(
