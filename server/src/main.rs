@@ -39,7 +39,10 @@ pub static DB: tokio::sync::OnceCell<sea_orm::DatabaseConnection> =
     tokio::sync::OnceCell::const_new();
 
 // 全局服务器配置单例
-static SERVER_CONFIG: std::sync::OnceLock<nodeget_lib::config::server::ServerConfig> =
+static SERVER_CONFIG: std::sync::OnceLock<std::sync::RwLock<nodeget_lib::config::server::ServerConfig>> =
+    std::sync::OnceLock::new();
+pub(crate) static SERVER_CONFIG_PATH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+pub(crate) static RELOAD_NOTIFY: std::sync::OnceLock<tokio::sync::Notify> =
     std::sync::OnceLock::new();
 
 // 服务器主函数
@@ -51,9 +54,12 @@ async fn main() {
     println!("Starting nodeget-server");
 
     let args = ServerArgs::par();
+    let config_path = args.config_path().to_owned();
+    let _ = SERVER_CONFIG_PATH.set(config_path.clone());
+    RELOAD_NOTIFY.get_or_init(tokio::sync::Notify::new);
 
     // Config Parse
-    let config = nodeget_lib::config::server::ServerConfig::get_and_parse_config(args.config_path())
+    let mut config = nodeget_lib::config::server::ServerConfig::get_and_parse_config(&config_path)
         .await
         .unwrap();
 
@@ -76,44 +82,27 @@ async fn main() {
         log::warn!("Invalid jsonrpc_timing_log_level '{invalid_level}', fallback to 'trace'");
     }
 
-    // Jemalloc Mem Debug
-    #[cfg(all(not(target_os = "windows"), feature = "jemalloc"))]
-    if matches!(&args.command, ServerCommand::Serve { .. }) {
-        tokio::spawn(async {
-            loop {
-                use tikv_jemalloc_ctl::{epoch, stats};
-                tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-                if epoch::advance().is_err() {
-                    return;
-                }
-
-                let allocated = stats::allocated::read().unwrap();
-                let active = stats::active::read().unwrap();
-                let resident = stats::resident::read().unwrap();
-                let mapped = stats::mapped::read().unwrap();
-
-                info!(
-                    "MEM STATS (Jemalloc Only): App Logic: {:.2} MB | Allocator Active: {:.2} MB | RSS (Resident): {:.2} MB | Mapped: {:.2} MB",
-                    allocated as f64 / 1024.0 / 1024.0,
-                    active as f64 / 1024.0 / 1024.0,
-                    resident as f64 / 1024.0 / 1024.0,
-                    mapped as f64 / 1024.0 / 1024.0
-                );
-            }
-        });
-    }
-
     info!("Starting nodeget-server with config: {config:?}");
 
     // 初始化全局 Config
-    SERVER_CONFIG.set(config.clone()).unwrap();
+    update_global_config(config.clone()).unwrap();
 
     // 连接数据库
     db_connection::init_db_connection().await;
 
     match args.command {
         ServerCommand::Serve { .. } => {
-            subcommands::serve::run(&config, rpc_timing_log_level).await;
+            loop {
+                subcommands::serve::run(&config, rpc_timing_log_level).await;
+
+                let reloaded_config =
+                    nodeget_lib::config::server::ServerConfig::get_and_parse_config(&config_path)
+                        .await
+                        .unwrap_or_else(|e| panic!("Failed to reload config after edit: {e}"));
+                update_global_config(reloaded_config.clone()).unwrap();
+                config = reloaded_config;
+                info!("Config hot reload applied.");
+            }
         }
         ServerCommand::Init { .. } => {
             subcommands::init::run().await;
@@ -122,4 +111,19 @@ async fn main() {
             subcommands::roll_super_token::run().await;
         }
     }
+}
+
+fn update_global_config(
+    config: nodeget_lib::config::server::ServerConfig,
+) -> anyhow::Result<()> {
+    if let Some(lock) = SERVER_CONFIG.get() {
+        let mut guard = lock.write().map_err(|e| anyhow::anyhow!("{e}"))?;
+        *guard = config;
+        return Ok(());
+    }
+
+    SERVER_CONFIG
+        .set(std::sync::RwLock::new(config))
+        .map_err(|_| anyhow::anyhow!("Failed to set SERVER_CONFIG"))?;
+    Ok(())
 }

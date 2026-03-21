@@ -56,6 +56,11 @@ pub async fn set_crontab_enable_by_name(
 }
 
 pub fn init_crontab_worker() {
+    static CRONTAB_WORKER_STARTED: std::sync::OnceLock<()> = std::sync::OnceLock::new();
+    if CRONTAB_WORKER_STARTED.set(()).is_err() {
+        return;
+    }
+
     tokio::spawn(async move {
         info!("Crontab scheduler started.");
         loop {

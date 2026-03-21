@@ -1,9 +1,11 @@
 use axum::routing::any;
+use log::info;
 use tower::Service;
 
 use crate::crontab::init_crontab_worker;
 use crate::rpc::get_modules;
 use crate::rpc_timing::RpcTimingMiddleware;
+use crate::RELOAD_NOTIFY;
 
 pub async fn run(
     config: &nodeget_lib::config::server::ServerConfig,
@@ -39,7 +41,7 @@ pub async fn run(
                 .build(),
         )
         .to_service_builder()
-        .build(rpc_module, stop_handle);
+        .build(rpc_module, stop_handle.clone());
 
     let app = axum::Router::new()
         .route("/terminal", any(crate::terminal::terminal_ws_handler))
@@ -56,11 +58,33 @@ pub async fn run(
             .await
             .unwrap();
 
-    axum::serve(listener, app).await.unwrap();
+    let serve_future = std::future::IntoFuture::into_future(axum::serve(listener, app));
+    tokio::pin!(serve_future);
+
+    tokio::select! {
+        result = &mut serve_future => {
+            result.unwrap();
+        }
+        () = RELOAD_NOTIFY
+            .get()
+            .expect("Reload notify not initialized")
+            .notified() => {
+            info!("Config reload requested, stopping server for restart...");
+            let stop_handle = stop_handle.clone();
+            tokio::spawn(async move {
+                let _ = tokio::time::timeout(std::time::Duration::from_secs(5), stop_handle.shutdown()).await;
+            });
+        }
+    }
 }
 
 #[cfg(all(not(target_os = "windows"), feature = "jemalloc"))]
 fn spawn_jemalloc_mem_debug_task() {
+    static JEMALLOC_MEM_DEBUG_STARTED: std::sync::OnceLock<()> = std::sync::OnceLock::new();
+    if JEMALLOC_MEM_DEBUG_STARTED.set(()).is_err() {
+        return;
+    }
+
     tokio::spawn(async {
         loop {
             use tikv_jemalloc_ctl::{epoch, stats};

@@ -1,8 +1,12 @@
-use crate::SERVER_CONFIG;
+use crate::{RELOAD_NOTIFY, SERVER_CONFIG, SERVER_CONFIG_PATH};
 use crate::rpc::RpcHelper;
 use jsonrpsee::core::{RpcResult, async_trait};
 use jsonrpsee::proc_macros::rpc;
 use log::info;
+use nodeget_lib::config::server::ServerConfig;
+use nodeget_lib::error::NodegetError;
+use nodeget_lib::permission::token_auth::TokenOrAuth;
+use crate::token::super_token::check_super_token;
 use nodeget_lib::utils::version::NodeGetVersion;
 use serde_json::Value;
 use serde_json::value::RawValue;
@@ -20,6 +24,12 @@ pub trait Rpc {
 
     #[method(name = "list_all_agent_uuid")]
     async fn list_all_agent_uuid(&self, token: String) -> RpcResult<Box<RawValue>>;
+
+    #[method(name = "read_config")]
+    async fn read_config(&self, token: String) -> RpcResult<String>;
+
+    #[method(name = "edit_config")]
+    async fn edit_config(&self, token: String, config_string: String) -> RpcResult<bool>;
 }
 
 pub struct NodegetServerRpcImpl;
@@ -42,11 +52,105 @@ impl RpcServer for NodegetServerRpcImpl {
         info!("Uuid Request");
         SERVER_CONFIG
             .get()
-            .map_or_else(String::new, |cfg| cfg.server_uuid.to_string())
+            .and_then(|cfg| cfg.read().ok().map(|c| c.server_uuid.to_string()))
+            .unwrap_or_default()
     }
 
     async fn list_all_agent_uuid(&self, token: String) -> RpcResult<Box<RawValue>> {
         list_all_agent_uuid::list_all_agent_uuid(token).await
+    }
+
+    async fn read_config(&self, token: String) -> RpcResult<String> {
+        config_ops::read_config(token).await
+    }
+
+    async fn edit_config(&self, token: String, config_string: String) -> RpcResult<bool> {
+        config_ops::edit_config(token, config_string).await
+    }
+}
+
+mod config_ops {
+    use super::*;
+
+    async fn ensure_super_token(token: &str) -> anyhow::Result<()> {
+        let token_or_auth = TokenOrAuth::from_full_token(token)
+            .map_err(|e| NodegetError::ParseError(format!("Failed to parse token: {e}")))?;
+
+        let is_super = check_super_token(&token_or_auth)
+            .await
+            .map_err(|e| NodegetError::PermissionDenied(format!("{e}")))?;
+
+        if !is_super {
+            return Err(NodegetError::PermissionDenied(
+                "Permission Denied: Super token required".to_owned(),
+            )
+            .into());
+        }
+
+        Ok(())
+    }
+
+    pub async fn read_config(token: String) -> RpcResult<String> {
+        let process_logic = async {
+            ensure_super_token(&token).await?;
+
+            let config_path = SERVER_CONFIG_PATH
+                .get()
+                .ok_or_else(|| NodegetError::Other("Server config path not initialized".to_owned()))?;
+
+            let file = tokio::fs::read_to_string(config_path)
+                .await
+                .map_err(|e| NodegetError::Other(format!("Failed to read config file: {e}")))?;
+
+            Ok(file)
+        };
+
+        match process_logic.await {
+            Ok(result) => Ok(result),
+            Err(e) => {
+                let nodeget_err = nodeget_lib::error::anyhow_to_nodeget_error(&e);
+                Err(jsonrpsee::types::ErrorObject::owned(
+                    nodeget_err.error_code() as i32,
+                    format!("{nodeget_err}"),
+                    None::<()>,
+                ))
+            }
+        }
+    }
+
+    pub async fn edit_config(token: String, config_string: String) -> RpcResult<bool> {
+        let process_logic = async {
+            ensure_super_token(&token).await?;
+
+            let _parsed: ServerConfig = toml::from_str(&config_string)
+                .map_err(|e| NodegetError::ParseError(format!("Config parse error: {e}")))?;
+
+            let config_path = SERVER_CONFIG_PATH
+                .get()
+                .ok_or_else(|| NodegetError::Other("Server config path not initialized".to_owned()))?;
+
+            tokio::fs::write(config_path, config_string)
+                .await
+                .map_err(|e| NodegetError::Other(format!("Failed to write config file: {e}")))?;
+
+            if let Some(notify) = RELOAD_NOTIFY.get() {
+                notify.notify_one();
+            }
+
+            Ok(true)
+        };
+
+        match process_logic.await {
+            Ok(result) => Ok(result),
+            Err(e) => {
+                let nodeget_err = nodeget_lib::error::anyhow_to_nodeget_error(&e);
+                Err(jsonrpsee::types::ErrorObject::owned(
+                    nodeget_err.error_code() as i32,
+                    format!("{nodeget_err}"),
+                    None::<()>,
+                ))
+            }
+        }
     }
 }
 

@@ -20,6 +20,7 @@ sha2 = "0.11.0-rc.3"
 sea-orm = { version = "2.0.0-rc.28", features = ["runtime-tokio-rustls", "sqlx-sqlite", "sqlx-postgres"] }
 serde = "1.0.228"
 serde_json = "1.0.149"
+toml = { version = "0.9.11", default-features = false, features = ["std", "serde", "parse"] }
 jsonrpsee = { version = "0.26.0", default-features = false, features = ["server", "macros"] }
 axum = { version = "0.8.8", default-features = false, features = ["tokio", "ws", "macros", "http1", "query"] }
 tower = { version = "0.5.3", default-features = false, features = ["tokio"] }
