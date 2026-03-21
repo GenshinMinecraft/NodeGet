@@ -6,6 +6,39 @@ use nodeget_lib::permission::token_auth::TokenOrAuth;
 use nodeget_lib::utils::generate_random_string;
 use sea_orm::{EntityTrait, Set};
 
+async fn insert_new_super_token(
+    db: &sea_orm::DatabaseConnection,
+) -> anyhow::Result<(String, String)> {
+    let token_key = generate_random_string(16);
+    let token_secret = generate_random_string(32);
+    let full_token = format!("{token_key}:{token_secret}");
+
+    let username = "root".to_string();
+    let raw_password = generate_random_string(32);
+
+    let token_hash = hash_string(&token_secret);
+    let password_hash = hash_string(&raw_password);
+
+    let super_token_model = token::ActiveModel {
+        id: Set(1),
+        version: Set(1),
+        token_key: Set(token_key),
+        token_hash: Set(token_hash),
+        time_stamp_from: Set(None),
+        time_stamp_to: Set(None),
+        token_limit: Set(serde_json::json!([])),
+        username: Set(Some(username)),
+        password_hash: Set(Some(password_hash)),
+    };
+
+    token::Entity::insert(super_token_model)
+        .exec(db)
+        .await
+        .map_err(|e| NodegetError::DatabaseError(format!("Failed to initialize super token: {e}")))?;
+
+    Ok((full_token, raw_password))
+}
+
 // 生成超级令牌，如果已存在则返回 None
 //
 // # 返回值
@@ -24,37 +57,20 @@ pub async fn generate_super_token() -> anyhow::Result<Option<(String, String)>> 
         return Ok(None);
     }
 
-    let token_key = generate_random_string(16);
-    let token_secret = generate_random_string(32);
-    let full_token = format!("{token_key}:{token_secret}");
+    Ok(Some(insert_new_super_token(db).await?))
+}
 
-    let username = "root".to_string();
-    let raw_password = generate_random_string(32);
+pub async fn roll_super_token() -> anyhow::Result<(String, String)> {
+    let db = DB.get().ok_or_else(|| {
+        NodegetError::DatabaseError("Database connection not initialized".to_string())
+    })?;
 
-    let token_hash = hash_string(&token_secret);
-
-    let password_hash = hash_string(&raw_password);
-
-    let super_token_model = token::ActiveModel {
-        id: Set(1),
-        version: Set(1),
-        token_key: Set(token_key),
-        token_hash: Set(token_hash),
-        time_stamp_from: Set(None),
-        time_stamp_to: Set(None),
-        token_limit: Set(serde_json::json!([])),
-        username: Set(Some(username)),
-        password_hash: Set(Some(password_hash)),
-    };
-
-    token::Entity::insert(super_token_model)
+    token::Entity::delete_by_id(1)
         .exec(db)
         .await
-        .map_err(|e| {
-            NodegetError::DatabaseError(format!("Failed to initialize super token: {e}"))
-        })?;
+        .map_err(|e| NodegetError::DatabaseError(format!("Failed to delete old super token: {e}")))?;
 
-    Ok(Some((full_token, raw_password)))
+    insert_new_super_token(db).await
 }
 
 // 检查给定的令牌或认证信息是否为超级令牌

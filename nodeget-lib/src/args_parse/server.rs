@@ -23,6 +23,11 @@ pub enum ServerCommand {
         #[arg(long, short)]
         config: String,
     },
+    /// Rotate the super token (id = 1) after interactive confirmation, then exit.
+    RollSuperToken {
+        #[arg(long, short)]
+        config: String,
+    },
 }
 
 impl ServerArgs {
@@ -44,7 +49,9 @@ impl ServerArgs {
 
     pub fn config_path(&self) -> &str {
         match &self.command {
-            ServerCommand::Serve { config } | ServerCommand::Init { config } => config.as_str(),
+            ServerCommand::Serve { config }
+            | ServerCommand::Init { config }
+            | ServerCommand::RollSuperToken { config } => config.as_str(),
         }
     }
 }

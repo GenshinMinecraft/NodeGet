@@ -11,12 +11,13 @@
 
 use axum::routing::any;
 use log::info;
+use std::io::{self, Write};
 use std::str::FromStr;
 use tower::Service;
 use nodeget_lib::args_parse::server::{ServerArgs, ServerCommand};
 use crate::crontab::init_crontab_worker;
 use crate::rpc::get_modules;
-use crate::token::super_token::generate_super_token;
+use crate::token::super_token::{generate_super_token, roll_super_token};
 #[cfg(all(not(target_os = "windows"), feature = "jemalloc"))]
 use tikv_jemallocator::Jemalloc;
 
@@ -55,6 +56,7 @@ async fn main() {
 
     let args = ServerArgs::par();
     let is_init = matches!(&args.command, ServerCommand::Init { .. });
+    let is_roll_super_token = matches!(&args.command, ServerCommand::RollSuperToken { .. });
 
     // Config Parse
     let config = nodeget_lib::config::server::ServerConfig::get_and_parse_config(args.config_path())
@@ -66,7 +68,7 @@ async fn main() {
 
     // Jemalloc Mem Debug
     #[cfg(all(not(target_os = "windows"), feature = "jemalloc"))]
-    if !is_init {
+    if matches!(&args.command, ServerCommand::Serve { .. }) {
         tokio::spawn(async {
             loop {
                 use tikv_jemalloc_ctl::{epoch, stats};
@@ -98,6 +100,11 @@ async fn main() {
 
     // 连接数据库
     db_connection::init_db_connection().await;
+
+    if is_roll_super_token {
+        roll_super_token_with_confirmation().await;
+        return;
+    }
 
     init_or_skip_super_token().await;
 
@@ -161,6 +168,53 @@ async fn init_or_skip_super_token() {
         }
         None => {
             info!("Super Token already exists, skipped.");
+        }
+    }
+}
+
+async fn roll_super_token_with_confirmation() {
+    let should_continue = prompt_yes_or_no(
+        "This action will delete the current super token (id=1) and generate a new one. Continue? [y/n]: ",
+    );
+    if !should_continue {
+        info!("Super token rotation cancelled by user.");
+        return;
+    }
+
+    match roll_super_token().await {
+        Ok((token, root_password)) => {
+            info!("Super token rotated successfully.");
+            info!("Super Token: {}", token);
+            info!("Root Password: {}", root_password);
+        }
+        Err(e) => {
+            panic!("Failed to rotate super token: {e}");
+        }
+    }
+}
+
+fn prompt_yes_or_no(prompt: &str) -> bool {
+    loop {
+        print!("{prompt}");
+        if let Err(e) = io::stdout().flush() {
+            println!("Failed to flush stdout: {e}. Please type y or n.");
+        }
+
+        let mut input = String::new();
+        match io::stdin().read_line(&mut input) {
+            Ok(_) => {
+                let normalized = input.trim().to_ascii_lowercase();
+                match normalized.as_str() {
+                    "y" | "yes" => return true,
+                    "n" | "no" => return false,
+                    _ => {
+                        println!("Invalid input. Please type y or n.");
+                    }
+                }
+            }
+            Err(e) => {
+                println!("Failed to read input: {e}. Please type y or n.");
+            }
         }
     }
 }
