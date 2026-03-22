@@ -1,13 +1,22 @@
 use nodeget_lib::error::NodegetError;
-use tokio::sync::{Mutex, OnceCell};
+use reqwest::Client;
+use std::sync::OnceLock;
+use tokio::sync::OnceCell;
 
-// 全局 HTTP 客户端代理实例
-static GLOBAL_AGENT: OnceCell<Mutex<ureq::Agent>> = OnceCell::const_new();
+// 全局 HTTP 客户端实例
+static GLOBAL_CLIENT: OnceCell<Client> = OnceCell::const_new();
+static RUSTLS_PROVIDER_INIT: OnceLock<()> = OnceLock::new();
 // HTTP Ping 超时时间，设定为 10 秒
 static PING_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
 /// HTTP Ping 结果类型
 pub type Result<T> = std::result::Result<T, NodegetError>;
+
+fn ensure_rustls_ring_provider() {
+    let _ = RUSTLS_PROVIDER_INIT.get_or_init(|| {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    });
+}
 
 // 对目标执行 HTTP Ping
 //
@@ -19,22 +28,21 @@ pub type Result<T> = std::result::Result<T, NodegetError>;
 // # 返回值
 // 成功时返回请求耗时，失败时返回错误信息
 pub async fn httping_target(target: url::Url) -> Result<std::time::Duration> {
-    let agent = GLOBAL_AGENT
+    let client = GLOBAL_CLIENT
         .get_or_init(async || {
-            Mutex::new(ureq::Agent::new_with_config(
-                ureq::Agent::config_builder()
-                    .timeout_global(Some(PING_TIMEOUT))
-                    .build(),
-            ))
+            ensure_rustls_ring_provider();
+            Client::builder()
+                .timeout(PING_TIMEOUT)
+                .build()
+                .expect("Failed to build global reqwest client")
         })
         .await;
 
     let start = std::time::Instant::now();
-    agent
-        .lock()
+    client
+        .get(target)
+        .send()
         .await
-        .get(target.to_string())
-        .call()
         .map(|_| start.elapsed())
         .map_err(|e| NodegetError::Other(format!("Failed to http ping target: {e}")))
 }
