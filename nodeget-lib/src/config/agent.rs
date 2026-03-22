@@ -61,6 +61,8 @@ pub struct Server {
     pub allow_edit_config: Option<bool>, // Dangerous
     // 是否允许执行命令
     pub allow_execute: Option<bool>, // Dangerous
+    // 是否允许 HTTP 请求任务
+    pub allow_http_request: Option<bool>, // Dangerous
 
     // 是否允许获取 IP 地址
     pub allow_ip: Option<bool>,

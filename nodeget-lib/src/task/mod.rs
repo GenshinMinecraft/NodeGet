@@ -3,6 +3,7 @@
 pub mod query;
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::time::Duration;
 
@@ -24,6 +25,37 @@ pub struct ExecuteTask {
     pub args: Vec<String>,
 }
 
+// HTTP 请求任务参数
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+pub struct HttpRequestTask {
+    // 请求 URL
+    pub url: url::Url,
+    // 请求方法，如 GET/POST/PUT
+    pub method: String,
+    // 请求头（键值对）
+    #[serde(default)]
+    pub headers: BTreeMap<String, String>,
+    // UTF-8 文本请求体，与 body_base64 互斥
+    pub body: Option<String>,
+    // Base64 编码请求体，与 body 互斥
+    pub body_base64: Option<String>,
+    // 出口 IP，可传具体 IP 或 "ipv4 auto"/"ipv6 auto"
+    pub ip: Option<String>,
+}
+
+// HTTP 请求任务结果
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+pub struct HttpRequestTaskResult {
+    // HTTP 状态码
+    pub status: u16,
+    // 响应头（数组格式，允许重复 key）
+    pub headers: Vec<BTreeMap<String, String>>,
+    // UTF-8 文本响应体，与 body_base64 互斥
+    pub body: Option<String>,
+    // Base64 编码响应体，与 body 互斥
+    pub body_base64: Option<String>,
+}
+
 // 任务事件类型枚举，定义各种可执行的任务类型
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -39,6 +71,8 @@ pub enum TaskEventType {
     WebShell(WebShellTask),
     // 命令执行任务
     Execute(ExecuteTask), // 结构化命令执行
+    // HTTP 请求任务
+    HttpRequest(HttpRequestTask),
 
     // 读取 Agent 配置任务
     ReadConfig,
@@ -59,6 +93,7 @@ impl TaskEventType {
             Self::HttpPing(_) => "http_ping",
             Self::WebShell(_) => "web_shell",
             Self::Execute(_) => "execute",
+            Self::HttpRequest(_) => "http_request",
             Self::EditConfig(_) => "edit_config",
             Self::ReadConfig => "read_config",
             Self::Ip => "ip",
@@ -97,6 +132,7 @@ impl TaskEventType {
             Self::HttpPing(_) => "allow_http_ping",
             Self::WebShell(_) => "allow_web_shell",
             Self::Execute(_) => "allow_execute",
+            Self::HttpRequest(_) => "allow_http_request",
             Self::ReadConfig => "allow_read_config",
             Self::EditConfig(_) => "allow_edit_config",
             Self::Ip => "allow_ip",
@@ -130,6 +166,8 @@ pub enum TaskEventResult {
     WebShell(bool), // Is Connected
     // 命令执行任务结果，返回命令输出
     Execute(String), // 命令输出
+    // HTTP 请求任务结果
+    HttpRequest(HttpRequestTaskResult),
 
     // 读取 Agent 配置任务结果，返回配置内容
     ReadConfig(String),
@@ -150,6 +188,7 @@ impl TaskEventResult {
             Self::HttpPing(_) => "http_ping",
             Self::WebShell(_) => "web_shell",
             Self::Execute(_) => "execute",
+            Self::HttpRequest(_) => "http_request",
             Self::ReadConfig(_) => "read_config",
             Self::EditConfig(_) => "edit_config",
             Self::Ip(_, _) => "ip",

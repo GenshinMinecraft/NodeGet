@@ -26,6 +26,7 @@ pub enum TaskEventType {
     Ping(String),       // 可能为域名，需解析
     TcpPing(String),    // 可能为域名，需解析
     HttpPing(url::Url), // Url, Method, Body
+    HttpRequest(HttpRequestTask), // 通用 HTTP 请求
 
     WebShell(WebShellTask), // Websocket URL + terminal_id
     Execute(ExecuteTask), // 结构化命令执行
@@ -44,6 +45,15 @@ pub struct ExecuteTask {
     pub cmd: String,
     pub args: Vec<String>,
 }
+
+pub struct HttpRequestTask {
+    pub url: url::Url,
+    pub method: String,
+    pub headers: BTreeMap<String, String>,
+    pub body: Option<String>, // 与 body_base64 互斥
+    pub body_base64: Option<String>, // 与 body 互斥
+    pub ip: Option<String>, // 指定出口 IP，或 "ipv4 auto" / "ipv6 auto"
+}
 ```
 
 下面是一些解析的示例:
@@ -59,6 +69,18 @@ pub struct ExecuteTask {
 
 {
   "http_ping": "https://1.1.1.1/"
+}
+
+{
+  "http_request": {
+    "url": "https://example.com",
+    "method": "POST",
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"hello\":\"world\"}",
+    "ip": "ipv4 auto"
+  }
 }
 
 {
@@ -102,6 +124,8 @@ pub struct ExecuteTask {
 }
 ```
 
+`http_request` 中 `body` 与 `body_base64` 互斥，最多只能出现一个字段。
+
 ## 任务回报
 
 Agent 在执行完后需要通过该结构体返回数据
@@ -112,6 +136,7 @@ pub enum TaskEventResult {
     Ping(f64),     // 延迟
     TcpPing(f64),  // 延迟
     HttpPing(f64), // 延迟
+    HttpRequest(HttpRequestTaskResult), // HTTP 请求结果
 
     WebShell(bool),  // Is Connected
     Execute(String), // 命令输出
@@ -119,6 +144,13 @@ pub enum TaskEventResult {
     EditConfig(bool),   // 是否成功写入
 
     Ip(Option<Ipv4Addr>, Option<Ipv6Addr>), // V4 V6 IP
+}
+
+pub struct HttpRequestTaskResult {
+    pub status: u16,
+    pub headers: Vec<BTreeMap<String, String>>, // 数组格式，允许重复 key
+    pub body: Option<String>, // 与 body_base64 互斥
+    pub body_base64: Option<String>, // 与 body 互斥
 }
 ```
 
@@ -137,6 +169,18 @@ pub enum TaskEventResult {
 }
 
 {
+  "http_request": {
+    "status": 200,
+    "headers": [
+      {
+        "content-type": "application/json"
+      }
+    ],
+    "body": "{\"hello\":\"world\"}"
+  }
+}
+
+{
   "read_config": "log_level = \"info\"\\nagent_uuid = \"auto_gen\""
 }
 
@@ -151,6 +195,8 @@ pub enum TaskEventResult {
   ]
 }
 ```
+
+若响应体不是 UTF-8 文本，则会返回 `body_base64`，并且不会返回 `body`。
 
 ## 查询条件
 

@@ -60,6 +60,29 @@
 如需 shell 语法，请显式调用 shell 程序并传参（示例：`bash -c` 或 `cmd /C`），而不是直接传一整段 shell 字符串。
 同时 `execute.cmd` 不能为空字符串。
 
+当 `task_type` 为 `http_request` 时，可以构造通用 HTTP 请求。例如：
+
+```json
+{
+    "token": "demo_token",
+    "target_uuid": "AGENT_UUID_HERE",
+    "task_type": {
+        "http_request": {
+            "url": "https://example.com",
+            "method": "POST",
+            "headers": {
+                "content-type": "application/json"
+            },
+            "body": "{\"hello\":\"world\"}",
+            "ip": "ipv4 auto"
+        }
+    }
+}
+```
+
+其中 `body` 与 `body_base64` 互斥，最多只能出现一个。
+`ip` 可传具体 IP，或 `"ipv4 auto"` / `"ipv6 auto"`。
+
 ## Error
 
 该方法可能返回错误

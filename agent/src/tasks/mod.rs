@@ -17,6 +17,8 @@ pub type Result<T> = anyhow::Result<T>;
 mod execute;
 // IP 获取模块
 mod ip;
+// HTTP Request 任务模块
+mod http_request;
 // Ping 任务模块
 pub mod ping;
 // PTY（伪终端）模块
@@ -28,6 +30,7 @@ fn is_task_allowed(server: &nodeget_lib::config::agent::Server, task_type: &Task
         TaskEventType::Ping(_) => server.allow_icmp_ping.unwrap_or(false),
         TaskEventType::TcpPing(_) => server.allow_tcp_ping.unwrap_or(false),
         TaskEventType::HttpPing(_) => server.allow_http_ping.unwrap_or(false),
+        TaskEventType::HttpRequest(_) => server.allow_http_request.unwrap_or(false),
         TaskEventType::WebShell(_) => server.allow_web_shell.unwrap_or(false),
         TaskEventType::Execute(_) => server.allow_execute.unwrap_or(false),
         TaskEventType::ReadConfig => server.allow_read_config.unwrap_or(false),
@@ -57,6 +60,12 @@ async fn execute_task(
             .await
             .map(|d| task_type.result_from_duration(d))
             .map_err(|e| NodegetError::Other(format!("{e}")).into()),
+
+        TaskEventType::HttpRequest(request) => {
+            http_request::execute_http_request(request.clone())
+                .await
+                .map(TaskEventResult::HttpRequest)
+        }
 
         TaskEventType::WebShell(web_shell) => {
             let terminal_id = web_shell.terminal_id.to_string();

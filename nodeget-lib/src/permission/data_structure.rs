@@ -93,7 +93,7 @@ pub enum DynamicMonitoring {
 
 // 任务权限枚举
 // Type 字段名
-// 接受 ping / tcp_ping / http_ping / web_shell / execute / ip
+// 接受 ping / tcp_ping / http_ping / web_shell / execute / http_request / ip
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Task {

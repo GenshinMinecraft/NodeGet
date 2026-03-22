@@ -23,6 +23,7 @@ pub async fn delete(token: String, conditions: Vec<TaskQueryCondition>) -> RpcRe
             "ping",
             "tcp_ping",
             "http_ping",
+            "http_request",
             "web_shell",
             "execute",
             "read_config",

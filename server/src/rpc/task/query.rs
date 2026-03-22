@@ -25,6 +25,7 @@ pub async fn query(token: String, task_data_query: TaskDataQuery) -> RpcResult<B
             "ping",
             "tcp_ping",
             "http_ping",
+            "http_request",
             "web_shell",
             "execute",
             "ip",

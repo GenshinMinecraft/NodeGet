@@ -51,6 +51,9 @@ allow_tcp_ping = true
 # 是否允许 HTTP Ping
 allow_http_ping = true
 
+# 是否允许通用 HTTP 请求，危险操作，谨慎开启
+allow_http_request = true
+
 # 是否允许 Web Shell，极度危险，谨慎开启
 allow_web_shell = true
 
