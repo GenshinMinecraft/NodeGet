@@ -13,7 +13,7 @@ static PING_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 pub type Result<T> = std::result::Result<T, NodegetError>;
 
 fn ensure_rustls_ring_provider() {
-    let _ = RUSTLS_PROVIDER_INIT.get_or_init(|| {
+    let () = RUSTLS_PROVIDER_INIT.get_or_init(|| {
         let _ = rustls::crypto::ring::default_provider().install_default();
     });
 }

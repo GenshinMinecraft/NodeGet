@@ -15,8 +15,8 @@ pub async fn run() {
     match roll_super_token().await {
         Ok((token, root_password)) => {
             info!("Super token rotated successfully.");
-            info!("Super Token: {}", token);
-            info!("Root Password: {}", root_password);
+            info!("Super Token: {token}");
+            info!("Root Password: {root_password}");
         }
         Err(e) => {
             panic!("Failed to rotate super token: {e}");

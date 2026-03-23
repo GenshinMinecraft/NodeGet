@@ -294,4 +294,5 @@ pub struct DynamicDataAvgQuery {
 其中 `timestamp_from` / `timestamp_to` 可省略；`points` 必须 >= 1。
 
 这两个结构体仅用于 PostgreSQL 下的 `avg` 查询方法。
-当前 `agent_query_static_avg` / `agent_query_dynamic_avg` 直接依赖数据库侧 `jsonb` 聚合，不再提供 SQLite 或其他数据库的 fallback。
+当前 `agent_query_static_avg` / `agent_query_dynamic_avg` 直接依赖数据库侧 `jsonb` 聚合，不再提供 SQLite 或其他数据库的
+fallback。

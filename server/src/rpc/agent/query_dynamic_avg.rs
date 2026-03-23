@@ -48,8 +48,8 @@ pub async fn query_dynamic_avg(
         }
 
         let db = AgentRpcImpl::get_db()?;
-        ensure_postgres_backend(&db)?;
-        query_dynamic_avg_postgres(&db, &dynamic_data_avg_query).await
+        ensure_postgres_backend(db)?;
+        query_dynamic_avg_postgres(db, &dynamic_data_avg_query).await
     };
 
     match process_logic.await {
@@ -102,7 +102,7 @@ fn ensure_postgres_backend(db: &DatabaseConnection) -> anyhow::Result<()> {
         "agent_query_dynamic_avg currently only supports PostgreSQL; SQLite and other databases are disabled for this method"
             .to_owned(),
     )
-    .into())
+        .into())
 }
 
 async fn query_dynamic_avg_postgres(
@@ -131,7 +131,7 @@ async fn query_dynamic_avg_postgres(
             NodegetError::DatabaseError(format!("Failed to query dynamic avg in postgres: {e}"))
         })?;
 
-    let json = row.map(|r| r.data).unwrap_or(Value::Array(Vec::new()));
+    let json = row.map_or(Value::Array(Vec::new()), |r| r.data);
     let json = serde_json::to_string(&json)
         .map_err(|e| NodegetError::SerializationError(format!("Serialization failed: {e}")))?;
 
@@ -164,7 +164,7 @@ fn build_postgres_dynamic_avg_sql(fields: &[DynamicDataQueryField]) -> String {
     };
 
     format!(
-        r#"
+        r"
 WITH filtered AS MATERIALIZED (
     SELECT timestamp{select_columns}
     FROM dynamic_monitoring
@@ -210,13 +210,13 @@ SELECT COALESCE(
     '[]'::jsonb
 ) AS data
 FROM agg
-"#
+"
     )
 }
 
 fn build_postgres_dynamic_field_aggregate_sql(field: &DynamicDataQueryField) -> String {
     match field {
-        DynamicDataQueryField::Cpu => r#"
+        DynamicDataQueryField::Cpu => r"
 jsonb_build_object(
     'per_core',
     (
@@ -236,30 +236,30 @@ jsonb_build_object(
         ) AS per_core
     ),
     'total_cpu_usage', AVG(NULLIF(bucketed.cpu_data->>'total_cpu_usage', '')::numeric)
-) AS cpu"#
+) AS cpu"
             .to_owned(),
-        DynamicDataQueryField::Ram => r#"
+        DynamicDataQueryField::Ram => r"
 jsonb_build_object(
     'total_memory', AVG(NULLIF(bucketed.ram_data->>'total_memory', '')::numeric),
     'available_memory', AVG(NULLIF(bucketed.ram_data->>'available_memory', '')::numeric),
     'used_memory', AVG(NULLIF(bucketed.ram_data->>'used_memory', '')::numeric),
     'total_swap', AVG(NULLIF(bucketed.ram_data->>'total_swap', '')::numeric),
     'used_swap', AVG(NULLIF(bucketed.ram_data->>'used_swap', '')::numeric)
-) AS ram"#
+) AS ram"
             .to_owned(),
-        DynamicDataQueryField::Load => r#"
+        DynamicDataQueryField::Load => r"
 jsonb_build_object(
     'one', AVG(NULLIF(bucketed.load_data->>'one', '')::numeric),
     'five', AVG(NULLIF(bucketed.load_data->>'five', '')::numeric),
     'fifteen', AVG(NULLIF(bucketed.load_data->>'fifteen', '')::numeric)
-) AS load"#
+) AS load"
             .to_owned(),
-        DynamicDataQueryField::System => r#"
+        DynamicDataQueryField::System => r"
 jsonb_build_object(
     'process_count', AVG(NULLIF(bucketed.system_data->>'process_count', '')::numeric)
-) AS system"#
+) AS system"
             .to_owned(),
-        DynamicDataQueryField::Disk => r#"
+        DynamicDataQueryField::Disk => r"
 (
     SELECT COALESCE(jsonb_agg(disks.obj ORDER BY disks.idx), '[]'::jsonb)
     FROM (
@@ -282,9 +282,9 @@ jsonb_build_object(
         WHERE b2.bucket = bucketed.bucket
         GROUP BY arr.ord
     ) AS disks
-) AS disk"#
+) AS disk"
             .to_owned(),
-        DynamicDataQueryField::Network => r#"
+        DynamicDataQueryField::Network => r"
 jsonb_build_object(
     'interfaces',
     (
@@ -307,9 +307,9 @@ jsonb_build_object(
     ),
     'udp_connections', AVG(NULLIF(bucketed.network_data->>'udp_connections', '')::numeric),
     'tcp_connections', AVG(NULLIF(bucketed.network_data->>'tcp_connections', '')::numeric)
-) AS network"#
+) AS network"
             .to_owned(),
-        DynamicDataQueryField::Gpu => r#"
+        DynamicDataQueryField::Gpu => r"
 (
     SELECT COALESCE(jsonb_agg(gpus.obj ORDER BY gpus.idx), '[]'::jsonb)
     FROM (
@@ -332,7 +332,7 @@ jsonb_build_object(
         WHERE b2.bucket = bucketed.bucket
         GROUP BY arr.ord
     ) AS gpus
-) AS gpu"#
+) AS gpu"
             .to_owned(),
     }
 }

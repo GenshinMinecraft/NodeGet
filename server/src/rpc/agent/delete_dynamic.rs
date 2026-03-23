@@ -33,7 +33,7 @@ pub async fn delete_dynamic(
                 "Permission Denied: Missing DynamicMonitoring Delete permission for requested scope"
                     .to_owned(),
             )
-            .into());
+                .into());
         }
 
         let db = AgentRpcImpl::get_db()?;

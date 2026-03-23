@@ -48,8 +48,8 @@ pub async fn query_static_avg(
         }
 
         let db = AgentRpcImpl::get_db()?;
-        ensure_postgres_backend(&db)?;
-        query_static_avg_postgres(&db, &static_data_avg_query).await
+        ensure_postgres_backend(db)?;
+        query_static_avg_postgres(db, &static_data_avg_query).await
     };
 
     match process_logic.await {
@@ -102,7 +102,7 @@ fn ensure_postgres_backend(db: &DatabaseConnection) -> anyhow::Result<()> {
         "agent_query_static_avg currently only supports PostgreSQL; SQLite and other databases are disabled for this method"
             .to_owned(),
     )
-    .into())
+        .into())
 }
 
 async fn query_static_avg_postgres(
@@ -131,7 +131,7 @@ async fn query_static_avg_postgres(
             NodegetError::DatabaseError(format!("Failed to query static avg in postgres: {e}"))
         })?;
 
-    let json = row.map(|r| r.data).unwrap_or(Value::Array(Vec::new()));
+    let json = row.map_or(Value::Array(Vec::new()), |r| r.data);
     let json = serde_json::to_string(&json)
         .map_err(|e| NodegetError::SerializationError(format!("Serialization failed: {e}")))?;
 
@@ -164,7 +164,7 @@ fn build_postgres_static_avg_sql(fields: &[StaticDataQueryField]) -> String {
     };
 
     format!(
-        r#"
+        r"
 WITH filtered AS MATERIALIZED (
     SELECT timestamp{select_columns}
     FROM static_monitoring
@@ -210,13 +210,13 @@ SELECT COALESCE(
     '[]'::jsonb
 ) AS data
 FROM agg
-"#
+"
     )
 }
 
 fn build_postgres_static_field_aggregate_sql(field: &StaticDataQueryField) -> String {
     match field {
-        StaticDataQueryField::Cpu => r#"
+        StaticDataQueryField::Cpu => r"
 jsonb_build_object(
     'physical_cores', AVG(NULLIF(bucketed.cpu_data->>'physical_cores', '')::numeric),
     'logical_cores', AVG(NULLIF(bucketed.cpu_data->>'logical_cores', '')::numeric),
@@ -238,9 +238,9 @@ jsonb_build_object(
             GROUP BY arr.ord
         ) AS per_core
     )
-) AS cpu"#
+) AS cpu"
             .to_owned(),
-        StaticDataQueryField::System => r#"
+        StaticDataQueryField::System => r"
 jsonb_build_object(
     'system_name', NULL,
     'system_kernel', NULL,
@@ -251,9 +251,9 @@ jsonb_build_object(
     'system_host_name', NULL,
     'arch', NULL,
     'virtualization', NULL
-) AS system"#
+) AS system"
             .to_owned(),
-        StaticDataQueryField::Gpu => r#"
+        StaticDataQueryField::Gpu => r"
 (
     SELECT COALESCE(jsonb_agg(gpus.obj ORDER BY gpus.idx), '[]'::jsonb)
     FROM (
@@ -270,7 +270,7 @@ jsonb_build_object(
         WHERE b2.bucket = bucketed.bucket
         GROUP BY arr.ord
     ) AS gpus
-) AS gpu"#
+) AS gpu"
             .to_owned(),
     }
 }

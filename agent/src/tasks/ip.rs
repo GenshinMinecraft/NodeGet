@@ -44,7 +44,7 @@ pub async fn ip() -> IPInfo {
 }
 
 fn ensure_rustls_ring_provider() {
-    let _ = RUSTLS_PROVIDER_INIT.get_or_init(|| {
+    let () = RUSTLS_PROVIDER_INIT.get_or_init(|| {
         let _ = rustls::crypto::ring::default_provider().install_default();
     });
 }

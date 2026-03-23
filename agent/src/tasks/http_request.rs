@@ -16,7 +16,7 @@ static RUSTLS_PROVIDER_INIT: OnceLock<()> = OnceLock::new();
 const HTTP_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 fn ensure_rustls_ring_provider() {
-    let _ = RUSTLS_PROVIDER_INIT.get_or_init(|| {
+    let () = RUSTLS_PROVIDER_INIT.get_or_init(|| {
         let _ = rustls::crypto::ring::default_provider().install_default();
     });
 }
@@ -51,7 +51,7 @@ fn parse_bind_ip(ip: Option<&str>) -> Result<Option<IpAddr>> {
         NodegetError::InvalidInput(format!(
             "Invalid http_request.ip '{ip_raw}', expected IP literal or 'ipv4 auto'/'ipv6 auto': {e}"
         ))
-        .into()
+            .into()
     })
 }
 

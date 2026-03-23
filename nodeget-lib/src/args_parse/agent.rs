@@ -12,6 +12,7 @@ pub struct AgentArgs {
 }
 
 impl AgentArgs {
+    #[must_use]
     pub fn par() -> Self {
         if std::env::args_os().len() == 1 {
             let bin_name = std::env::args()

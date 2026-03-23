@@ -36,6 +36,7 @@ pub enum ServerCommand {
 }
 
 impl ServerArgs {
+    #[must_use]
     pub fn par() -> Self {
         if std::env::args_os().len() == 1 {
             let bin_name = std::env::args()
@@ -52,7 +53,8 @@ impl ServerArgs {
         args
     }
 
-    pub fn config_path(&self) -> &str {
+    #[must_use]
+    pub const fn config_path(&self) -> &str {
         match &self.command {
             ServerCommand::Serve { config }
             | ServerCommand::Init { config }
