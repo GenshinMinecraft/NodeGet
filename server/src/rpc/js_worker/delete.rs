@@ -1,20 +1,21 @@
 use crate::entity::js_worker;
 use crate::js_runtime::runtime_pool;
 use crate::rpc::RpcHelper;
+use crate::rpc::js_worker::auth::check_js_worker_permission;
 use crate::rpc::js_worker::JsWorkerRpcImpl;
 use jsonrpsee::core::RpcResult;
 use nodeget_lib::error::NodegetError;
+use nodeget_lib::permission::data_structure::JsWorker as JsWorkerPermission;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde_json::value::RawValue;
 
 pub async fn delete(token: String, name: String) -> RpcResult<Box<RawValue>> {
     let process_logic = async {
-        // TODO: token auth
-        let _ = token;
-
         if name.trim().is_empty() {
             return Err(NodegetError::InvalidInput("name cannot be empty".to_owned()).into());
         }
+
+        check_js_worker_permission(&token, name.as_str(), JsWorkerPermission::Delete).await?;
 
         let db = JsWorkerRpcImpl::get_db()?;
         let delete_result = js_worker::Entity::delete_many()

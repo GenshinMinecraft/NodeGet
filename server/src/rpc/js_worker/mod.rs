@@ -5,9 +5,11 @@ use jsonrpsee::proc_macros::rpc;
 use serde_json::Value;
 use serde_json::value::RawValue;
 
+mod auth;
 mod create;
 mod delete;
 mod get_rt_pool;
+mod list_all_js_worker;
 mod read;
 mod run;
 mod update;
@@ -52,6 +54,9 @@ pub trait Rpc {
 
     #[method(name = "get_rt_pool")]
     async fn get_rt_pool(&self, token: String) -> RpcResult<Box<RawValue>>;
+
+    #[method(name = "list_all_js_worker")]
+    async fn list_all_js_worker(&self, token: String) -> RpcResult<Box<RawValue>>;
 }
 
 pub struct JsWorkerRpcImpl;
@@ -103,5 +108,9 @@ impl RpcServer for JsWorkerRpcImpl {
 
     async fn get_rt_pool(&self, token: String) -> RpcResult<Box<RawValue>> {
         get_rt_pool::get_rt_pool(token).await
+    }
+
+    async fn list_all_js_worker(&self, token: String) -> RpcResult<Box<RawValue>> {
+        list_all_js_worker::list_all_js_worker(token).await
     }
 }

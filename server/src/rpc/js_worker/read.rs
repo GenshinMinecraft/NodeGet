@@ -1,21 +1,22 @@
 use crate::entity::js_worker;
 use crate::rpc::RpcHelper;
+use crate::rpc::js_worker::auth::check_js_worker_permission;
 use crate::rpc::js_worker::JsWorkerRpcImpl;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use jsonrpsee::core::RpcResult;
 use nodeget_lib::error::NodegetError;
+use nodeget_lib::permission::data_structure::JsWorker as JsWorkerPermission;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde_json::value::RawValue;
 
 pub async fn read(token: String, name: String) -> RpcResult<Box<RawValue>> {
     let process_logic = async {
-        // TODO: token auth
-        let _ = token;
-
         if name.trim().is_empty() {
             return Err(NodegetError::InvalidInput("name cannot be empty".to_owned()).into());
         }
+
+        check_js_worker_permission(&token, name.as_str(), JsWorkerPermission::Read).await?;
 
         let db = JsWorkerRpcImpl::get_db()?;
         let model = js_worker::Entity::find()

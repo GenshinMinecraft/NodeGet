@@ -58,7 +58,7 @@ pub struct Limit {
 
 ### Scope
 
-Scope 为作用域，即表示在某一个对象 (目前为 Agent Uuid) 有权限
+Scope 为作用域，即表示在某一个对象上有权限（Agent / Kv Namespace / JsWorker）
 
 ```rust
 pub enum Scope {
@@ -68,6 +68,8 @@ pub enum Scope {
     AgentUuid(uuid::Uuid),
     // KvNamespace 作用域，通过名称指定
     KvNamespace(String),
+    // JsWorker 作用域，通过脚本名指定，支持后缀 * 通配
+    JsWorker(String),
 }
 ```
 
@@ -87,17 +89,22 @@ pub enum Permission {
     // Crontab 权限
     Crontab(Crontab),
 
+    // CrontabResult 权限
+    CrontabResult(CrontabResult),
+
     // Kv 权限
     Kv(Kv),
 
     // Terminal 权限
     Terminal(Terminal),
-
-    // CrontabResult 权限
-    CrontabResult(CrontabResult),
     
     // NodeGet 权限
     NodeGet(NodeGet),
+
+    // Js Worker 权限
+    JsWorker(JsWorker),
+    // Js Result 权限
+    JsResult(JsResult),
 }
 
 // 静态监控权限枚举
@@ -172,6 +179,8 @@ pub enum CrontabResult {
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Kv {
+    // 列出可见 Namespace
+    ListAllNamespace,
     // 列出该 Namespace 下所有键
     ListAllKeys,
     // 下面为 KV 数据库的 CRUD 操作
@@ -200,6 +209,27 @@ pub enum Terminal {
 pub enum NodeGet {
     // 列出所有 Agent Uuid
     ListAllAgentUuid,
+    // 查看 JS Runtime 池信息
+    GetRtPool,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum JsWorker {
+    ListALlJsWorker,
+    Create,
+    Read,
+    Write, // update
+    Delete,
+    RunDefinedJsWorker,
+    RunRawJsWorker,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum JsResult {
+    Read(String),
+    Delete(String),
 }
 
 ```
@@ -212,6 +242,24 @@ pub enum NodeGet {
 - `DynamicMonitoring::Delete`：允许调用 `agent_delete_dynamic`
 
 两者均需配合目标 Agent 的 Scope（`AgentUuid`）使用，或在 `Global` Scope 下全局生效。
+
+### JsWorker / JsResult 权限
+
+`JsWorker` 与 `JsResult` 都使用 `Scope::JsWorker(String)` 进行范围约束。
+
+- `Scope::JsWorker("demo_worker")`：仅作用于 `demo_worker`
+- `Scope::JsWorker("demo_*")`：作用于所有以 `demo_` 开头的脚本
+
+`JsResult` 的 `Read/Delete(String)` 也支持同样的后缀 `*` 通配。
+
+`JsWorker::ListALlJsWorker` 的语义是“列出当前 Token 在权限范围内且数据库真实存在的脚本”。
+
+### NodeGet::GetRtPool
+
+若需要调用 `js-worker_get_rt_pool`，应授予：
+
+- `Permission::NodeGet(NodeGet::GetRtPool)`
+- 建议配合 `Scope::Global`
 
 ## Demo
 
@@ -377,3 +425,52 @@ Task、上报目前所有 Task 任务类型 的权限
 
 对 UUID 为 `00000000-0000-0000-0000-000000000001` 和 `00000000-0000-0000-0000-000000000002` 的 Agent 相关的 Crontab
 具有读取和写入权限。
+
+### JsWorker 权限示例
+
+现有这么一个结构体：
+
+```json
+{
+  "scopes": [
+    {
+      "js_worker": "demo_*"
+    }
+  ],
+  "permissions": [
+    {
+      "js_worker": "list_a_ll_js_worker"
+    },
+    {
+      "js_worker": "create"
+    },
+    {
+      "js_worker": "read"
+    },
+    {
+      "js_worker": "write"
+    },
+    {
+      "js_worker": "delete"
+    },
+    {
+      "js_worker": "run_defined_js_worker"
+    },
+    {
+      "js_result": {
+        "read": "demo_*"
+      }
+    },
+    {
+      "js_result": {
+        "delete": "demo_*"
+      }
+    }
+  ]
+}
+```
+
+它表示：
+
+- 允许操作所有 `demo_` 前缀的 JsWorker
+- 允许查询/删除所有 `demo_` 前缀脚本的执行结果

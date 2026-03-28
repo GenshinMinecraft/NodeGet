@@ -216,6 +216,64 @@ export const themeZhConfig = {
 					link: '/api/crontab_result/delete.md'
 				}]
 			},
+			// JsWorker
+			{
+				text: 'JsWorker',
+				collapsed: false,
+				items: [{
+					text: '介绍',
+					link: '/api/js_worker/index.md'
+				},
+				{
+					text: '创建脚本',
+					link: '/api/js_worker/create.md'
+				},
+				{
+					text: '读取脚本',
+					link: '/api/js_worker/read.md'
+				},
+				{
+					text: '更新脚本',
+					link: '/api/js_worker/update.md'
+				},
+				{
+					text: '删除脚本',
+					link: '/api/js_worker/delete.md'
+				},
+				{
+					text: '运行脚本',
+					link: '/api/js_worker/run.md'
+				},
+				{
+					text: '列出可见脚本',
+					link: '/api/js_worker/list_all_js_worker.md'
+				},
+				{
+					text: 'Runtime 池信息',
+					link: '/api/js_worker/get_rt_pool.md'
+				},
+				{
+					text: '脚本编写规范',
+					link: '/api/js_worker/script.md'
+				}]
+			},
+			// JsResult
+			{
+				text: 'JsResult',
+				collapsed: false,
+				items: [{
+					text: '介绍',
+					link: '/api/js_result/index.md'
+				},
+				{
+					text: '查询执行结果',
+					link: '/api/js_result/query.md'
+				},
+				{
+					text: '删除执行结果',
+					link: '/api/js_result/delete.md'
+				}]
+			},
 			// KV
 			{
 				text: 'KV',

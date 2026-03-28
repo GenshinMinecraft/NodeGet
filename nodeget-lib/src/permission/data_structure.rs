@@ -39,6 +39,8 @@ pub enum Scope {
     AgentUuid(uuid::Uuid),
     // KvNamespace 作用域，通过名称指定
     KvNamespace(String),
+    // JsWorker 作用域，通过名称指定
+    JsWorker(String),
 }
 
 // 权限枚举，定义不同类型的操作权限
@@ -54,17 +56,23 @@ pub enum Permission {
     // Crontab 权限
     Crontab(Crontab),
 
+    // CrontabResult 权限
+    CrontabResult(CrontabResult),
+
     // Kv 权限
     Kv(Kv),
 
     // Terminal 权限
     Terminal(Terminal),
 
-    // CrontabResult 权限
-    CrontabResult(CrontabResult),
 
     // NodeGet 权限
     NodeGet(NodeGet),
+
+    // Js Worker 权限
+    JsWorker(JsWorker),
+    // Js Result 权限
+    JsResult(JsResult),
 }
 
 // 静态监控权限枚举
@@ -155,4 +163,26 @@ pub enum Terminal {
 pub enum NodeGet {
     // 列出所有 Agent Uuid
     ListAllAgentUuid,
+    GetRtPool,
+}
+
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum JsWorker {
+    ListALlJsWorker,
+    Create,
+    Read,
+    Write, // update
+    Delete,
+    RunDefinedJsWorker,
+    RunRawJsWorker
+}
+
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum JsResult {
+    Read(String),
+    Delete(String),
 }

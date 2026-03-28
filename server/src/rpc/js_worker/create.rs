@@ -1,12 +1,14 @@
 use crate::entity::js_worker;
 use crate::js_runtime::compile_js_module_to_bytecode;
 use crate::rpc::RpcHelper;
+use crate::rpc::js_worker::auth::check_js_worker_permission;
 use crate::rpc::js_worker::JsWorkerRpcImpl;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use chrono::Utc;
 use jsonrpsee::core::RpcResult;
 use nodeget_lib::error::NodegetError;
+use nodeget_lib::permission::data_structure::JsWorker as JsWorkerPermission;
 use sea_orm::{ActiveModelTrait, ActiveValue, ColumnTrait, EntityTrait, QueryFilter, Set};
 use serde_json::Value;
 use serde_json::value::RawValue;
@@ -17,14 +19,13 @@ pub async fn create(
     js_script_base64: String,
     runtime_clean_time: Option<i64>,
     env: Option<Value>,
-) -> RpcResult<Box<RawValue>> {
+    ) -> RpcResult<Box<RawValue>> {
     let process_logic = async {
-        // TODO: token auth
-        let _ = token;
-
         if name.trim().is_empty() {
             return Err(NodegetError::InvalidInput("name cannot be empty".to_owned()).into());
         }
+
+        check_js_worker_permission(&token, name.as_str(), JsWorkerPermission::Create).await?;
 
         if js_script_base64.trim().is_empty() {
             return Err(

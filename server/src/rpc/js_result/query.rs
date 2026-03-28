@@ -1,5 +1,8 @@
 use crate::entity::js_result;
 use crate::rpc::RpcHelper;
+use crate::rpc::js_result::auth::{
+    JsResultAction, ensure_js_result_permission, resolve_accessible_js_result_workers,
+};
 use crate::rpc::js_result::JsResultRpcImpl;
 use jsonrpsee::core::RpcResult;
 use nodeget_lib::error::NodegetError;
@@ -72,13 +75,38 @@ fn apply_filter_to_select(
 
 pub async fn query(token: String, query: JsResultDataQuery) -> RpcResult<Box<RawValue>> {
     let process_logic = async {
-        // TODO: token auth
-        let _ = token;
         let db = JsResultRpcImpl::get_db()?;
 
         let mut select = js_result::Entity::find();
         let mut is_last = false;
         let mut limit_count: Option<u64> = None;
+        let mut requested_worker_names: Vec<String> = query
+            .condition
+            .iter()
+            .filter_map(|condition| {
+                if let JsResultQueryCondition::JsWorkerName(name) = condition {
+                    Some(name.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        requested_worker_names.sort();
+        requested_worker_names.dedup();
+
+        if requested_worker_names.is_empty() {
+            let allowed_workers = resolve_accessible_js_result_workers(&token, JsResultAction::Read).await?;
+            if allowed_workers.is_empty() {
+                let json_str = "[]".to_owned();
+                return RawValue::from_string(json_str)
+                    .map_err(|e| NodegetError::SerializationError(e.to_string()).into());
+            }
+            select = select.filter(js_result::Column::JsWorkerName.is_in(allowed_workers));
+        } else {
+            for worker_name in &requested_worker_names {
+                ensure_js_result_permission(&token, worker_name, JsResultAction::Read).await?;
+            }
+        }
 
         for condition in &query.condition {
             match condition {

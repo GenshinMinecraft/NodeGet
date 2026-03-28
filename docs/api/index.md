@@ -15,4 +15,6 @@ outline: deep
 - [Task](./task/index.md)
 - [Terminal](./terminal/index.md)
 - [Crontab](./crontab/index.md)
+- [JsWorker](./js_worker/index.md)
+- [JsResult](./js_result/index.md)
 - [KV](./kv/index.md)

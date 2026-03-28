@@ -1,5 +1,8 @@
 use crate::entity::js_result;
 use crate::rpc::RpcHelper;
+use crate::rpc::js_result::auth::{
+    JsResultAction, ensure_js_result_permission, resolve_accessible_js_result_workers,
+};
 use crate::rpc::js_result::JsResultRpcImpl;
 use jsonrpsee::core::RpcResult;
 use nodeget_lib::error::NodegetError;
@@ -10,8 +13,6 @@ use serde_json::value::RawValue;
 
 pub async fn delete(token: String, query: JsResultDataQuery) -> RpcResult<Box<RawValue>> {
     let process_logic = async {
-        // TODO: token auth
-        let _ = token;
         let db = JsResultRpcImpl::get_db()?;
 
         let mut select_query = js_result::Entity::find()
@@ -22,6 +23,42 @@ pub async fn delete(token: String, query: JsResultDataQuery) -> RpcResult<Box<Ra
         let mut is_last = false;
         let mut limit_count: Option<u64> = None;
         let condition_count = query.condition.len();
+        let mut requested_worker_names: Vec<String> = query
+            .condition
+            .iter()
+            .filter_map(|condition| {
+                if let JsResultQueryCondition::JsWorkerName(name) = condition {
+                    Some(name.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        requested_worker_names.sort();
+        requested_worker_names.dedup();
+
+        if requested_worker_names.is_empty() {
+            let allowed_workers =
+                resolve_accessible_js_result_workers(&token, JsResultAction::Delete).await?;
+            if allowed_workers.is_empty() {
+                let response = serde_json::json!({
+                    "success": true,
+                    "deleted": 0,
+                    "condition_count": condition_count,
+                });
+                let json_str = serde_json::to_string(&response).map_err(|e| {
+                    NodegetError::SerializationError(format!("Failed to serialize delete response: {e}"))
+                })?;
+                return RawValue::from_string(json_str)
+                    .map_err(|e| NodegetError::SerializationError(e.to_string()).into());
+            }
+            select_query = select_query.filter(js_result::Column::JsWorkerName.is_in(allowed_workers.clone()));
+            delete_query = delete_query.filter(js_result::Column::JsWorkerName.is_in(allowed_workers));
+        } else {
+            for worker_name in &requested_worker_names {
+                ensure_js_result_permission(&token, worker_name, JsResultAction::Delete).await?;
+            }
+        }
 
         for condition in query.condition {
             match condition {

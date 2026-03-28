@@ -1,11 +1,13 @@
 use crate::entity::{js_result, js_worker};
 use crate::js_runtime::runtime_pool;
 use crate::rpc::RpcHelper;
+use crate::rpc::js_worker::auth::check_js_worker_permission;
 use crate::rpc::js_worker::JsWorkerRpcImpl;
 use jsonrpsee::core::RpcResult;
 use log::error;
 use nodeget_lib::error::NodegetError;
 use nodeget_lib::js_runtime::RunType;
+use nodeget_lib::permission::data_structure::JsWorker as JsWorkerPermission;
 use nodeget_lib::utils::get_local_timestamp_ms_i64;
 use sea_orm::{ActiveValue, ColumnTrait, EntityTrait, QueryFilter, Set};
 use serde_json::Value;
@@ -19,8 +21,6 @@ pub async fn run(
     env: Option<Value>,
 ) -> RpcResult<Box<RawValue>> {
     let process_logic = async {
-        // TODO: token auth
-        let _ = token;
         let run_type = run_type.unwrap_or(RunType::Call);
 
         let script_name = js_script_name.trim().to_owned();
@@ -28,6 +28,13 @@ pub async fn run(
         if script_name.is_empty() {
             return Err(NodegetError::InvalidInput("js_script_name cannot be empty".to_owned()).into());
         }
+
+        check_js_worker_permission(
+            &token,
+            script_name.as_str(),
+            JsWorkerPermission::RunDefinedJsWorker,
+        )
+        .await?;
 
         let db = JsWorkerRpcImpl::get_db()?.clone();
         let model = js_worker::Entity::find()

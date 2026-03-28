@@ -5,6 +5,7 @@ use jsonrpsee::proc_macros::rpc;
 use nodeget_lib::js_result::query::JsResultDataQuery;
 use serde_json::value::RawValue;
 
+mod auth;
 mod delete;
 mod query;
 
