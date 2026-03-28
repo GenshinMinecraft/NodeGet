@@ -14,6 +14,7 @@
 | [list_all_js_worker](./list_all_js_worker.md) | 列出当前 Token 可见且存在的脚本名              |
 | [get_rt_pool](./get_rt_pool.md)              | 查看 JS Runtime 池状态                 |
 | [script](./script.md)                        | JS 脚本编写规范与示例                       |
+| [injected](./injected.md)                    | JS Runtime 外部注入函数/对象清单             |
 
 ## 运行模型
 

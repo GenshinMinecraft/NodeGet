@@ -46,6 +46,7 @@ async function handler(params, env, ctx) {}
 
 - `fetch`：已注入，可直接发 HTTP 请求。
 - `ctx.nodeget`：已注入，参数是 JSON 字符串，返回也是 JSON 字符串。
+- 更多注入函数/对象见 [injected](./injected.md)。
 
 ## 推荐示例（同时使用 nodeget + fetch）
 

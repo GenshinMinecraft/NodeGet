@@ -1,8 +1,7 @@
-use super::{JS_RT_MEMORY_LIMIT_BYTES, enrich_exception, js_error, nodeget};
+use super::{JS_RT_MEMORY_LIMIT_BYTES, enrich_exception, init_js_runtime_globals, js_error};
 use log::{debug, warn};
 use nodeget_lib::js_runtime::{RunType, RuntimePoolInfo, RuntimePoolWorkerInfo};
 use nodeget_lib::utils::get_local_timestamp_ms_i64;
-use rquickjs::prelude::{Async, Func};
 use rquickjs::{AsyncContext, AsyncRuntime, Error, Module, Promise, Value as JsValue};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -453,6 +452,7 @@ async fn execute_on_worker(
                 const env = globalThis.__nodeget_env || {};
                 const runtimeCtx = {
                     nodeget: globalThis.nodeget,
+                    uuid: globalThis.uuid,
                     runType: runHandler
                 };
 
@@ -519,10 +519,7 @@ async fn create_runtime_state() -> Result<RuntimeState, Error> {
     let ctx = AsyncContext::full(&rt).await?;
 
     let init_result: Result<(), Error> = rquickjs::async_with!(ctx => |ctx| {
-        llrt_fetch::init(&ctx)?;
-        let global = ctx.globals();
-        global.set("nodeget", Func::from(Async(nodeget::js_nodeget)))?;
-        Ok(())
+        init_js_runtime_globals(&ctx)
     })
     .await;
 

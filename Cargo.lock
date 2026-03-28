@@ -2409,6 +2409,8 @@ dependencies = [
  "hex",
  "jsonrpsee",
  "llrt_fetch",
+ "llrt_timers",
+ "llrt_url",
  "log",
  "migration",
  "nodeget-lib",

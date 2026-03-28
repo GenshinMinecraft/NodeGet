@@ -5,6 +5,7 @@ use rquickjs::{
 use nodeget_lib::js_runtime::{JsCodeInput, RunType};
 use serde_json::Value;
 use std::ffi::CString;
+use uuid::Uuid;
 
 pub mod nodeget;
 pub mod runtime_pool;
@@ -13,6 +14,16 @@ pub(crate) const JS_RT_MEMORY_LIMIT_BYTES: usize = 8 * 1024 * 1024;
 
 pub fn js_error(stage: &'static str, message: impl ToString) -> Error {
     Error::new_from_js_message(stage, "String", message.to_string())
+}
+
+pub(crate) fn init_js_runtime_globals(ctx: &Ctx<'_>) -> Result<(), Error> {
+    llrt_fetch::init(ctx)?;
+    llrt_url::init(ctx)?;
+    llrt_timers::init(ctx)?;
+    let global = ctx.globals();
+    global.set("nodeget", Func::from(Async(nodeget::js_nodeget)))?;
+    global.set("uuid", Func::from(|| Uuid::new_v4().to_string()))?;
+    Ok(())
 }
 
 fn format_js_exception(ctx: &Ctx<'_>) -> String {
@@ -83,9 +94,7 @@ pub fn compile_js_module_to_bytecode(js_code: impl AsRef<str>) -> Result<Vec<u8>
 
         let compile_result: Result<Vec<u8>, Error> = rquickjs::async_with!(ctx => |ctx| {
             // Keep compile context aligned with runtime context.
-            llrt_fetch::init(&ctx)?;
-            let global = ctx.globals();
-            global.set("nodeget", Func::from(Async(nodeget::js_nodeget)))?;
+            init_js_runtime_globals(&ctx)?;
 
             compile_module_bytecode_no_eval(&ctx, &js_code)
         })
@@ -113,9 +122,8 @@ pub fn js_runner(
         let ctx = AsyncContext::full(&rt).await?;
 
         let js_result: Result<Value, Error> = rquickjs::async_with!(ctx => |ctx| {
-            llrt_fetch::init(&ctx)?;
+            init_js_runtime_globals(&ctx)?;
             let global = ctx.globals();
-            global.set("nodeget", Func::from(Async(nodeget::js_nodeget)))?;
 
             let run_type_handler = run_type.handler_name().to_owned();
             global.set("__nodeget_run_handler", run_type_handler)?;
@@ -171,6 +179,7 @@ pub fn js_runner(
                     const env = globalThis.__nodeget_env || {};
                     const runtimeCtx = {
                         nodeget: globalThis.nodeget,
+                        uuid: globalThis.uuid,
                         runType: runHandler
                     };
 
