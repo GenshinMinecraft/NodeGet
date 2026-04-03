@@ -331,13 +331,13 @@ fn spawn_worker(script_name: &str) -> anyhow::Result<Arc<RuntimeWorkerHandle>> {
 
     std::thread::Builder::new()
         .name(format!("js-rt-{script_name}"))
-        .spawn(move || worker_loop(rx))
+        .spawn(move || worker_loop(script_name, rx))
         .map_err(|e| anyhow::anyhow!("Failed to spawn JS runtime worker thread: {e}"))?;
 
     Ok(handle)
 }
 
-fn worker_loop(receiver: std::sync::mpsc::Receiver<WorkerCommand>) {
+fn worker_loop(script_name: String, receiver: std::sync::mpsc::Receiver<WorkerCommand>) {
     let host_rt = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -370,6 +370,7 @@ fn worker_loop(receiver: std::sync::mpsc::Receiver<WorkerCommand>) {
                 let exec_result = host_rt.block_on(async {
                     execute_on_worker(
                         &mut runtime_state,
+                        script_name.as_str(),
                         bytecode,
                         bytecode_hash,
                         run_type,
@@ -389,6 +390,7 @@ fn worker_loop(receiver: std::sync::mpsc::Receiver<WorkerCommand>) {
 #[allow(clippy::future_not_send)]
 async fn execute_on_worker(
     runtime_state: &mut Option<RuntimeState>,
+    script_name: &str,
     bytecode: Vec<u8>,
     bytecode_hash: u64,
     run_type: RunType,
@@ -449,16 +451,23 @@ async fn execute_on_worker(
             .map_err(|e| js_error("js_runner", format!("Failed to build env in JS: {e}")))?;
         ctx.globals().set("__nodeget_env", env_js)?;
 
+        ctx.globals()
+            .set("__nodeget_current_script_name", script_name.to_owned())?;
+        let inline_caller_js = ctx
+            .json_parse("null")
+            .map_err(|e| js_error("js_runner", format!("Failed to set inline caller in JS: {e}")))?;
+        ctx.globals().set("__nodeget_inline_caller", inline_caller_js)?;
+
         let invoke_script = r#"
             (async () => {
                 const entry = globalThis.__nodeget_entry;
                 const runHandler = globalThis.__nodeget_run_handler;
                 const input = globalThis.__nodeget_run_params;
                 const env = globalThis.__nodeget_env || {};
-                const inline_call = async (jsWorkerName, callParams, timeoutSec = null) => {
+                const inlineCall = async (jsWorkerName, callParams, timeoutSec = null) => {
                     const workerName = String(jsWorkerName ?? "").trim();
                     if (!workerName) {
-                        throw new Error("inline_call js_worker_name cannot be empty");
+                        throw new Error("inlineCall js_worker_name cannot be empty");
                     }
 
                     const timeoutValue =
@@ -470,7 +479,7 @@ async fn execute_on_worker(
                         (!Number.isFinite(timeoutValue) || timeoutValue <= 0)
                     ) {
                         throw new Error(
-                            "inline_call timeout_sec must be a positive finite number"
+                            "inlineCall timeout_sec must be a positive finite number"
                         );
                     }
 
@@ -479,7 +488,7 @@ async fn execute_on_worker(
                         paramsJson = JSON.stringify(callParams);
                     } catch (e) {
                         throw new Error(
-                            `inline_call params is not JSON-serializable: ${e}`
+                            `inlineCall params is not JSON-serializable: ${e}`
                         );
                     }
                     if (typeof paramsJson !== "string") {
@@ -489,20 +498,22 @@ async fn execute_on_worker(
                     const raw = await globalThis.__nodeget_inline_call_raw(
                         workerName,
                         paramsJson,
-                        timeoutValue
+                        timeoutValue,
+                        globalThis.__nodeget_current_script_name ?? null
                     );
                     try {
                         return JSON.parse(raw);
                     } catch (e) {
-                        throw new Error(`inline_call returned invalid JSON: ${e}`);
+                        throw new Error(`inlineCall returned invalid JSON: ${e}`);
                     }
                 };
-                globalThis.inline_call = inline_call;
+                globalThis.inlineCall = inlineCall;
                 const runtimeCtx = {
                     nodeget: globalThis.nodeget,
                     uuid: globalThis.uuid,
                     runType: runHandler,
-                    inline_call
+                    inlineCall,
+                    inlineCaller: globalThis.__nodeget_inline_caller ?? null
                 };
 
                 if (!entry || typeof entry !== "object") {

@@ -106,6 +106,7 @@ pub async fn run_inline_call_and_record_result(
     js_script_name: String,
     params: Value,
     timeout_sec: Option<f64>,
+    inline_caller: Option<String>,
 ) -> anyhow::Result<Value> {
     let script_name = js_script_name.trim().to_owned();
     if script_name.is_empty() {
@@ -157,12 +158,15 @@ pub async fn run_inline_call_and_record_result(
     .map_err(|e| NodegetError::DatabaseError(e.to_string()))?;
     let js_result_id = insert_result.last_insert_id;
 
+    let target_script_name = worker_name.clone();
     let run_task = tokio::task::spawn_blocking(move || {
         crate::js_runtime::js_runner(
             JsCodeInput::Bytecode(bytecode),
             RunType::InlineCall,
             params,
             env,
+            Some(target_script_name),
+            inline_caller,
         )
         .map_err(|e| NodegetError::Other(format!("JavaScript runtime execution failed: {e}")).into())
     });

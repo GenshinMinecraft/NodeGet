@@ -45,7 +45,8 @@ async function handler(params, env, ctx) {}
 - `env`：来自 `js-worker_run.env` 或数据库保存的 `env`
 - `ctx`：运行时上下文，当前包含：
     - `ctx.nodeget(rawJsonString)`：调用 Server 内部 JSON-RPC
-    - `ctx.inline_call(js_worker_name, params, timeout_sec?)`：同步调用另一个 JS Worker，返回 JSON 结果；会写入 `js_result`
+    - `ctx.inlineCall(js_worker_name, params, timeout_sec?)`：同步调用另一个 JS Worker，返回 JSON 结果；会写入 `js_result`
+    - `ctx.inlineCaller`：调用者脚本名（如 A 通过 `inlineCall` 调 B，则 B 中该值为 `A`；顶层调用为 `null`）
     - `ctx.uuid()`：生成随机 UUID v4 字符串
     - `ctx.runType`：当前入口名（`onCall` / `onInlineCall` / `onCron` / `onRoute`）
 
@@ -70,7 +71,7 @@ async function onRoute(request, env, ctx) {}
 
 - `fetch`：已注入，可直接发 HTTP 请求。
 - `ctx.nodeget`：已注入，参数是 JSON 字符串，返回也是 JSON 字符串。
-- `ctx.inline_call`：已注入，可 `await` 调用指定 `js_worker` 的 `onInlineCall`。
+- `ctx.inlineCall`：已注入，可 `await` 调用指定 `js_worker` 的 `onInlineCall`。
 - 更多注入函数/对象见 [injected](./injected.md)。
 
 ## 推荐示例（同时使用 nodeget + fetch）
