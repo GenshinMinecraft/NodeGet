@@ -89,6 +89,32 @@
 }
 ```
 
+### 按 run_type 删除
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "js-result_delete",
+  "params": {
+    "token": "demo_token",
+    "query": {
+      "condition": [
+        {
+          "js_worker_name": "demo_worker"
+        },
+        {
+          "run_type": "inline_call"
+        },
+        {
+          "limit": 20
+        }
+      ]
+    }
+  },
+  "id": 3
+}
+```
+
 ## 权限要求
 
 - 需要 `Permission::JsResult(JsResult::Delete("worker_name_or_pattern"))`。

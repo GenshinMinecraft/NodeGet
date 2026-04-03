@@ -29,6 +29,11 @@ impl MigrationTrait for Migration {
                             .not_null(),
                     )
                     .col(
+                        ColumnDef::new(JsResultInDatabase::RunType)
+                            .string()
+                            .not_null(),
+                    )
+                    .col(
                         ColumnDef::new(JsResultInDatabase::StartTime)
                             .big_integer()
                             .null(),
@@ -88,6 +93,7 @@ enum JsResultInDatabase {
     Id,
     JsWorkerId,
     JsWorkerName,
+    RunType,
     StartTime,
     FinishTime,
     Param,

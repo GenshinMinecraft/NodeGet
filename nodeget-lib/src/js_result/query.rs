@@ -6,6 +6,7 @@ pub enum JsResultQueryCondition {
     Id(i64),
     JsWorkerId(i64),
     JsWorkerName(String),
+    RunType(String),
     StartTimeFromTo(i64, i64),
     StartTimeFrom(i64),
     StartTimeTo(i64),

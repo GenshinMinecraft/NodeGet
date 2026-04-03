@@ -11,6 +11,16 @@ pub enum RunType {
 
 impl RunType {
     #[must_use]
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Call => "call",
+            Self::Cron => "cron",
+            Self::Route => "route",
+            Self::InlineCall => "inline_call",
+        }
+    }
+
+    #[must_use]
     pub const fn handler_name(&self) -> &'static str {
         match self {
             Self::Call => "onCall",

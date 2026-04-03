@@ -20,6 +20,7 @@
   "id": 1,
   "js_worker_id": 10,
   "js_worker_name": "demo_worker",
+  "run_type": "call",
   "start_time": 1775000000000,
   "finish_time": 1775000000123,
   "param": {
@@ -47,6 +48,7 @@ pub enum JsResultQueryCondition {
     Id(i64),
     JsWorkerId(i64),
     JsWorkerName(String),
+    RunType(String),
     StartTimeFromTo(i64, i64),
     StartTimeFrom(i64),
     StartTimeTo(i64),

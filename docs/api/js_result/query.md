@@ -28,6 +28,7 @@
     "id": 1,
     "js_worker_id": 10,
     "js_worker_name": "demo_worker",
+    "run_type": "call",
     "start_time": 1775000000000,
     "finish_time": 1775000000123,
     "param": {
@@ -109,6 +110,32 @@
     }
   },
   "id": 3
+}
+```
+
+### 按 run_type 查询
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "js-result_query",
+  "params": {
+    "token": "demo_token",
+    "query": {
+      "condition": [
+        {
+          "js_worker_name": "demo_worker"
+        },
+        {
+          "run_type": "inline_call"
+        },
+        {
+          "limit": 20
+        }
+      ]
+    }
+  },
+  "id": 4
 }
 ```
 

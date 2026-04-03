@@ -10,6 +10,7 @@ pub struct Model {
     pub id: i64,
     pub js_worker_id: i64,
     pub js_worker_name: String,
+    pub run_type: String,
     pub start_time: Option<i64>,
     pub finish_time: Option<i64>,
     #[sea_orm(column_type = "JsonBinary", nullable)]

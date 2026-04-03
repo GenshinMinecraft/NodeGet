@@ -24,6 +24,9 @@ fn apply_filter_to_select(
         JsResultQueryCondition::JsWorkerName(js_worker_name) => {
             select = select.filter(js_result::Column::JsWorkerName.eq(js_worker_name.clone()));
         }
+        JsResultQueryCondition::RunType(run_type) => {
+            select = select.filter(js_result::Column::RunType.eq(run_type.clone()));
+        }
         JsResultQueryCondition::StartTimeFromTo(start, end) => {
             select = select.filter(
                 js_result::Column::StartTime

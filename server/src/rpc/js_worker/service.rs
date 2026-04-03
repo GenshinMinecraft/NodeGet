@@ -39,12 +39,14 @@ pub async fn enqueue_defined_js_worker_run(
     let runtime_clean_time = model.runtime_clean_time;
     let resolved_env =
         env_override.unwrap_or_else(|| model.env.unwrap_or_else(|| serde_json::json!({})));
+    let run_type_text = run_type.as_str().to_owned();
 
     let start_time = get_local_timestamp_ms_i64().unwrap_or(0);
     let insert_result = js_result::Entity::insert(js_result::ActiveModel {
         id: ActiveValue::NotSet,
         js_worker_id: Set(worker_id),
         js_worker_name: Set(worker_name.clone()),
+        run_type: Set(run_type_text),
         start_time: Set(Some(start_time)),
         finish_time: Set(None),
         param: Set(Some(params.clone())),
@@ -143,6 +145,7 @@ pub async fn run_inline_call_and_record_result(
         id: ActiveValue::NotSet,
         js_worker_id: Set(worker_id),
         js_worker_name: Set(worker_name.clone()),
+        run_type: Set(RunType::InlineCall.as_str().to_owned()),
         start_time: Set(Some(start_time)),
         finish_time: Set(None),
         param: Set(Some(params.clone())),
