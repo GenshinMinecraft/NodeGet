@@ -1,10 +1,11 @@
 use crate::entity::js_worker;
 use axum::routing::any;
-use axum::{extract::Path, http::StatusCode};
+use axum::{extract::ConnectInfo, extract::Path, http::StatusCode};
 use log::info;
 use nodeget_lib::js_runtime::RunType;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
 use tower::Service;
 
 use crate::RELOAD_NOTIFY;
@@ -85,8 +86,10 @@ pub async fn run(
             .route(
                 "/worker-route/{route_name}",
                 any(
-                    |Path(route_name): Path<String>, req: axum::extract::Request| async move {
-                        handle_js_worker_route(route_name, req).await
+                    |Path(route_name): Path<String>,
+                     ConnectInfo(peer_addr): ConnectInfo<SocketAddr>,
+                     req: axum::extract::Request| async move {
+                        handle_js_worker_route(route_name, peer_addr, req).await
                     },
                 ),
             )
@@ -94,8 +97,9 @@ pub async fn run(
                 "/worker-route/{route_name}/{*path}",
                 any(
                     |Path((route_name, _path)): Path<(String, String)>,
+                     ConnectInfo(peer_addr): ConnectInfo<SocketAddr>,
                      req: axum::extract::Request| async move {
-                        handle_js_worker_route(route_name, req).await
+                        handle_js_worker_route(route_name, peer_addr, req).await
                     },
                 ),
             )
@@ -113,7 +117,10 @@ pub async fn run(
             .await
             .unwrap();
 
-    let serve_future = std::future::IntoFuture::into_future(axum::serve(listener, app));
+    let serve_future = std::future::IntoFuture::into_future(axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    ));
     tokio::pin!(serve_future);
 
     tokio::select! {
@@ -208,6 +215,7 @@ struct JsRouteOutput {
 
 async fn handle_js_worker_route(
     route_name: String,
+    peer_addr: SocketAddr,
     req: axum::extract::Request,
 ) -> axum::http::Response<jsonrpsee::server::HttpBody> {
     const ROUTE_BODY_LIMIT_BYTES: usize = 8 * 1024 * 1024;
@@ -236,7 +244,7 @@ async fn handle_js_worker_route(
         format!("{scheme}://{host}{uri}")
     };
 
-    let headers = parts
+    let mut headers = parts
         .headers
         .iter()
         .filter_map(|(name, value)| {
@@ -246,6 +254,11 @@ async fn handle_js_worker_route(
             })
         })
         .collect::<Vec<_>>();
+    headers.retain(|h| !h.name.eq_ignore_ascii_case("ng-connecting-ip"));
+    headers.push(JsRouteHeader {
+        name: "ng-connecting-ip".to_owned(),
+        value: peer_addr.ip().to_string(),
+    });
 
     let body_bytes = match axum::body::to_bytes(body, ROUTE_BODY_LIMIT_BYTES).await {
         Ok(bytes) => bytes.to_vec(),

@@ -50,6 +50,7 @@ async function onRoute(request, env, ctx) {}
 ```
 
 - `request`：运行时直接传入的 Fetch 标准 `Request` 对象
+  可通过 `request.headers.get("NG-Connecting-IP")` 获取 TCP 对端 IP（头名大小写不敏感）。
 - `env`：来自数据库保存的 `env`
 - `ctx`：与其他入口一致
 

@@ -31,6 +31,20 @@ export default {
 - `request` 为 Fetch 标准 `Request` 对象
 - 返回值必须是 Fetch 标准 `Response` 对象
 
+## 请求来源 IP（`NG-Connecting-IP`）
+
+`onRoute` 收到的 `request.headers` 中会包含 `NG-Connecting-IP`（头名大小写不敏感）。
+
+- 值为 Server 看到的 TCP 对端 IP 地址。
+- 若请求经过本机反向代理，通常会是 `127.0.0.1`（或 `::1`）。
+- 若前面是 CDN/边缘节点，通常会是该 CDN/边缘节点的出口 IP。
+
+示例：
+
+```js
+const peerIp = request.headers.get("NG-Connecting-IP");
+```
+
 ## 示例
 
 脚本：
