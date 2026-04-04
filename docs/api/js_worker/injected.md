@@ -17,6 +17,8 @@
 
 - `llrt_fetch::init`
     - `fetch`、`Request`、`Response`、`Headers`、`FormData`
+- `llrt_buffer::init`
+    - `Buffer`、`Blob`、`File`、`atob`、`btoa`
 - `llrt_stream_web::init`
     - `ReadableStream`、`WritableStream`、`TransformStream`
 - `llrt_url::init`

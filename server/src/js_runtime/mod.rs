@@ -19,6 +19,7 @@ pub fn js_error(stage: &'static str, message: impl Into<String>) -> Error {
 
 pub(crate) fn init_js_runtime_globals(ctx: &Ctx<'_>) -> Result<(), Error> {
     llrt_fetch::init(ctx)?;
+    llrt_buffer::init(ctx)?;
     llrt_stream_web::init(ctx)?;
     llrt_url::init(ctx)?;
     llrt_util::init(ctx)?;

@@ -2456,6 +2456,7 @@ dependencies = [
  "futures",
  "hex",
  "jsonrpsee",
+ "llrt_buffer",
  "llrt_fetch",
  "llrt_stream_web",
  "llrt_timers",
