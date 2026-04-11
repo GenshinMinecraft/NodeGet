@@ -125,7 +125,7 @@ NodeGet 是本项目的基础服务接口模块，提供服务端状态查询、
 }
 ```
 
-内存日志缓冲区为固定容量的环形缓冲区，满时自动淘汰最旧的条目。容量和过滤级别可在 `[logging]` 配置段中通过 `memory_log_capacity` 和 `memory_log_filter` 设置，详见 [Server 配置](../config/server.md)
+内存日志缓冲区为固定容量的环形缓冲区，满时自动淘汰最旧的条目。容量和过滤级别可在 `[logging]` 配置段中通过 `memory_log_capacity` 和 `memory_log_filter` 设置，详见 [Server 配置](../../guide/config/server.md)
 
 ## 注意事项
 
