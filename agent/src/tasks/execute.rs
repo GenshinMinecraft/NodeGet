@@ -78,9 +78,11 @@ pub async fn execute_command(task: ExecuteTask) -> Result<String> {
 
             if result.len() > max_chars {
                 let original_len = result.len();
-                let truncated_part = result.split_off(original_len - max_chars);
+                let split_at = result.ceil_char_boundary(original_len - max_chars);
+                let truncated_part = result.split_off(split_at);
                 result = format!(
-                    "[... Output truncated from {original_len} to {max_chars} chars ...]\n{truncated_part}"
+                    "[... Output truncated from {original_len} to {} bytes ...]\n{truncated_part}",
+                    truncated_part.len()
                 );
             }
 

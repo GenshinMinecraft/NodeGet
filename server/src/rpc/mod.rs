@@ -48,8 +48,9 @@ impl fmt::Display for TruncatedRaw<'_> {
         if s.len() <= MAX {
             f.write_str(s)
         } else {
-            f.write_str(&s[..MAX])?;
-            write!(f, "…({} bytes total)", s.len())
+            let end = s.floor_char_boundary(MAX);
+            f.write_str(&s[..end])?;
+            write!(f, "[...{} bytes total]", s.len())
         }
     }
 }
