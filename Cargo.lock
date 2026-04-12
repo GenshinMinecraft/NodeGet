@@ -2416,7 +2416,6 @@ dependencies = [
  "serde",
  "serde_json",
  "simple_logger",
- "socket2 0.6.1",
  "surge-ping",
  "sysinfo",
  "tokio",
