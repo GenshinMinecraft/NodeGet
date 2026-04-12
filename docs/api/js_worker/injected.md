@@ -6,7 +6,10 @@
 
 ### 全局函数
 
-- `globalThis.nodeget(json)` — 调用 NodeGet JSON-RPC API，`json` 可以是 JSON 字符串或 JS 对象（对象会自动 `JSON.stringify`），返回解析后的 JS 对象
+- `globalThis.nodeget(json)` — 调用 NodeGet JSON-RPC API，支持以下调用方式：
+    - `nodeget(json)` — 传入完整的 JSON-RPC 请求（string 或 object），返回解析后的 JS 对象
+    - `nodeget(method, params)` — 快捷方式，自动构造 `{ jsonrpc: "2.0", method, params, id: randomUUID() }`
+    - `nodeget(method, params, id)` — 同上，但指定请求 id
 - `globalThis.inlineCall(js_worker_name, params, timeout_sec?)` — 调用其他 JS Worker
 - `globalThis.randomUUID()` — 生成随机 UUID v4 字符串
 

@@ -69,7 +69,11 @@ async function onRoute(request, env, ctx) {}
 ## 可用能力
 
 - `fetch`：已注入，可直接发 HTTP 请求。
-- `globalThis.nodeget(json)`：已注入，参数可以是 JSON 字符串或 JS 对象（对象会自动 `JSON.stringify`），返回解析后的 JS 对象。
+- `globalThis.nodeget(...)`：已注入，支持三种调用方式：
+    - `nodeget(json)` — 传入完整 JSON-RPC 请求（string 或 object）
+    - `nodeget(method, params)` — 快捷方式，自动生成 id
+    - `nodeget(method, params, id)` — 快捷方式，指定 id
+  返回解析后的 JS 对象。
 - `globalThis.randomUUID()`：已注入，生成随机 UUID v4 字符串。
 - `ctx.inlineCall`：已注入，可 `await` 调用指定 `js_worker` 的 `onInlineCall`。
 - 更多注入函数/对象见 [injected](./injected.md)。
@@ -79,12 +83,8 @@ async function onRoute(request, env, ctx) {}
 ```js
 export default {
   async onCall(params, env, ctx) {
-    const hello = await nodeget({
-      jsonrpc: "2.0",
-      method: "nodeget-server_hello",
-      params: [],
-      id: 1001
-    });
+    // 快捷方式：nodeget(method, params)
+    const hello = await nodeget("nodeget-server_hello", []);
 
     const resp = await fetch("https://httpbin.org/get");
     const text = await resp.text();

@@ -55,9 +55,18 @@ pub(crate) fn init_js_runtime_globals(ctx: &Ctx<'_>) -> Result<(), Error> {
     global.set("randomUUID", Func::from(|| Uuid::new_v4().to_string()))?;
     // Wrap raw functions to return parsed JS objects instead of JSON strings
     ctx.eval::<(), _>(
-        r"
-        globalThis.nodeget = async (json) => {
-            const input = typeof json === 'string' ? json : JSON.stringify(json);
+        r#"
+        globalThis.nodeget = async (...args) => {
+            let input;
+            if (args.length <= 1) {
+                const json = args[0];
+                input = typeof json === 'string' ? json : JSON.stringify(json);
+            } else {
+                const method = args[0];
+                const params = args[1];
+                const id = args.length >= 3 ? args[2] : globalThis.randomUUID();
+                input = JSON.stringify({ jsonrpc: "2.0", method, params, id });
+            }
             const raw = await globalThis.__nodeget_rpc_raw(input);
             return JSON.parse(raw);
         };
@@ -65,7 +74,7 @@ pub(crate) fn init_js_runtime_globals(ctx: &Ctx<'_>) -> Result<(), Error> {
             const raw = await globalThis.__nodeget_inline_call_raw(name, paramsJson, timeoutSec, caller);
             return JSON.parse(raw);
         };
-        ",
+        "#,
     )?;
     Ok(())
 }
