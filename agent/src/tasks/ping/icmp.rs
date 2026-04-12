@@ -25,6 +25,7 @@ mod dgram {
     use socket2::{Domain, Protocol, SockAddr, Socket, Type};
     use std::mem::MaybeUninit;
     use std::net::SocketAddr;
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::time::Instant;
 
     // ICMP Echo Request/Reply type codes
@@ -32,6 +33,10 @@ mod dgram {
     const ICMP_ECHO_REPLY: u8 = 0;
     const ICMPV6_ECHO_REQUEST: u8 = 128;
     const ICMPV6_ECHO_REPLY: u8 = 129;
+
+    // 记住 DGRAM socket 是否可用，避免每次都尝试创建
+    static DGRAM_V4_AVAILABLE: AtomicBool = AtomicBool::new(true);
+    static DGRAM_V6_AVAILABLE: AtomicBool = AtomicBool::new(true);
 
     /// 计算 ICMP 校验和（RFC 1071 one's complement）
     fn icmp_checksum(data: &[u8]) -> u16 {
@@ -51,7 +56,6 @@ mod dgram {
     }
 
     /// 构造 ICMP Echo Request 报文
-    /// 格式: type(1) + code(1) + checksum(2) + id(2) + seq(2) + payload
     fn build_echo_request(is_v6: bool, id: u16, seq: u16, payload: &[u8]) -> Vec<u8> {
         let ty = if is_v6 {
             ICMPV6_ECHO_REQUEST
@@ -62,7 +66,6 @@ mod dgram {
         let mut buf = vec![0u8; len];
         buf[0] = ty;
         buf[1] = 0; // code
-        // checksum 先置零
         buf[4..6].copy_from_slice(&id.to_be_bytes());
         buf[6..8].copy_from_slice(&seq.to_be_bytes());
         buf[8..].copy_from_slice(payload);
@@ -75,135 +78,129 @@ mod dgram {
         buf
     }
 
-    /// 尝试创建 unprivileged ICMP socket
-    /// 返回 Err 表示系统不支持或权限不足，应 fallback 到 surge_ping
+    /// 尝试创建 DGRAM ICMP socket
+    /// 返回 Ok(socket) 或 Err（权限/协议不支持）
     fn try_create_socket(is_v6: bool) -> std::io::Result<Socket> {
         let (domain, protocol) = if is_v6 {
             (Domain::IPV6, Protocol::ICMPV6)
         } else {
             (Domain::IPV4, Protocol::ICMPV4)
         };
-        let socket = Socket::new(domain, Type::DGRAM, Some(protocol))?;
-        socket.set_nonblocking(true)?;
-        socket.set_read_timeout(Some(PING_TIMEOUT))?;
-        socket.set_write_timeout(Some(PING_TIMEOUT))?;
-        Ok(socket)
+        Socket::new(domain, Type::DGRAM, Some(protocol))
     }
 
-    /// 使用 DGRAM ICMP socket 执行 ping
-    /// 成功返回 RTT，失败返回 io::Error
-    async fn dgram_ping(target: IpAddr) -> std::io::Result<Duration> {
+    /// 使用 DGRAM ICMP socket 执行 ping（阻塞，在 spawn_blocking 中调用）
+    fn dgram_ping_blocking(socket: Socket, target: IpAddr, id: u16, packet: Vec<u8>) -> std::io::Result<Duration> {
         let is_v6 = target.is_ipv6();
-        let socket = try_create_socket(is_v6)?;
+        let dest = SockAddr::from(SocketAddr::new(target, 0));
 
-        let id: u16 = random();
-        let seq: u16 = 0;
-        let packet = build_echo_request(is_v6, id, seq, &ICMP_PAYLOAD);
+        socket.set_nonblocking(false)?;
+        socket.set_read_timeout(Some(PING_TIMEOUT))?;
+        socket.set_write_timeout(Some(PING_TIMEOUT))?;
 
-        let dest: SocketAddr = match target {
-            IpAddr::V4(v4) => SocketAddr::new(IpAddr::V4(v4), 0),
-            IpAddr::V6(v6) => SocketAddr::new(IpAddr::V6(v6), 0),
-        };
-        let dest_addr = SockAddr::from(dest);
+        let start = Instant::now();
+        socket.send_to(&packet, &dest)?;
 
-        // 使用 spawn_blocking 因为 socket2 是同步 API
-        let duration = tokio::task::spawn_blocking(move || -> std::io::Result<Duration> {
-            // 设置阻塞超时（spawn_blocking 内部是同步的）
-            socket.set_nonblocking(false)?;
-            socket.set_read_timeout(Some(PING_TIMEOUT))?;
+        let mut recv_buf = [MaybeUninit::<u8>::uninit(); 256];
+        let deadline = start + PING_TIMEOUT;
 
-            let start = Instant::now();
-            socket.send_to(&packet, &dest_addr)?;
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "ICMP ping timeout",
+                ));
+            }
+            socket.set_read_timeout(Some(remaining))?;
 
-            let mut recv_buf = [MaybeUninit::<u8>::uninit(); 256];
-            let deadline = start + PING_TIMEOUT;
-
-            loop {
-                let remaining = deadline.saturating_duration_since(Instant::now());
-                if remaining.is_zero() {
+            let (n, _from) = match socket.recv_from(&mut recv_buf) {
+                Ok(r) => r,
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock
+                    || e.kind() == std::io::ErrorKind::TimedOut =>
+                {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::TimedOut,
                         "ICMP ping timeout",
                     ));
                 }
-                socket.set_read_timeout(Some(remaining))?;
+                Err(e) => return Err(e),
+            };
 
-                let (n, _from) = match socket.recv_from(&mut recv_buf) {
-                    Ok(r) => r,
-                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock
-                        || e.kind() == std::io::ErrorKind::TimedOut =>
-                    {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::TimedOut,
-                            "ICMP ping timeout",
-                        ));
-                    }
-                    Err(e) => return Err(e),
-                };
-
-                if n < 8 {
-                    continue;
-                }
-
-                // SAFETY: recv_from 已写入 n 字节
-                let data: &[u8] =
-                    unsafe { std::slice::from_raw_parts(recv_buf.as_ptr().cast::<u8>(), n) };
-
-                // DGRAM socket 返回的数据不含 IP 头，直接是 ICMP 报文
-                let reply_type = data[0];
-                let expected_reply = if is_v6 {
-                    ICMPV6_ECHO_REPLY
-                } else {
-                    ICMP_ECHO_REPLY
-                };
-
-                if reply_type != expected_reply {
-                    continue;
-                }
-
-                // 对于 DGRAM ICMP socket，内核会按 id 做 demux
-                // 但为安全起见仍然校验 id
-                let reply_id = u16::from_be_bytes([data[4], data[5]]);
-                if reply_id != id {
-                    continue;
-                }
-
-                return Ok(start.elapsed());
+            if n < 8 {
+                continue;
             }
-        })
-        .await
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))??;
 
-        Ok(duration)
+            // SAFETY: recv_from 已写入 n 字节
+            let data: &[u8] =
+                unsafe { std::slice::from_raw_parts(recv_buf.as_ptr().cast::<u8>(), n) };
+
+            let reply_type = data[0];
+            let expected_reply = if is_v6 {
+                ICMPV6_ECHO_REPLY
+            } else {
+                ICMP_ECHO_REPLY
+            };
+
+            if reply_type != expected_reply {
+                continue;
+            }
+
+            let reply_id = u16::from_be_bytes([data[4], data[5]]);
+            if reply_id != id {
+                continue;
+            }
+
+            return Ok(start.elapsed());
+        }
     }
 
     /// 尝试使用 unprivileged ICMP socket ping
     /// 返回 Ok(Some(duration)) 成功，Ok(None) 表示不支持应 fallback，Err 表示 ping 失败
     pub async fn try_ping(target: IpAddr) -> std::result::Result<Option<Duration>, NodegetError> {
-        match dgram_ping(target).await {
-            Ok(d) => Ok(Some(d)),
+        let is_v6 = target.is_ipv6();
+        let flag = if is_v6 {
+            &DGRAM_V6_AVAILABLE
+        } else {
+            &DGRAM_V4_AVAILABLE
+        };
+
+        // 快速路径：已知不可用，直接跳过
+        if !flag.load(Ordering::Relaxed) {
+            return Ok(None);
+        }
+
+        // 尝试创建 socket —— 只有这一步的失败才意味着"不支持"
+        let socket = match try_create_socket(is_v6) {
+            Ok(s) => s,
             Err(e) => {
-                // EPERM / EACCES / EPROTONOSUPPORT / EAFNOSUPPORT → 不支持，应 fallback
-                match e.kind() {
-                    std::io::ErrorKind::PermissionDenied => {
-                        debug!("ICMP DGRAM socket permission denied, falling back to raw socket");
-                        Ok(None)
-                    }
-                    _ if e.raw_os_error() == Some(libc::EPROTONOSUPPORT)
-                        || e.raw_os_error() == Some(libc::EACCES) =>
-                    {
-                        debug!(
-                            "ICMP DGRAM socket not supported (os error {}), falling back to raw socket",
-                            e.raw_os_error().unwrap_or(0)
-                        );
-                        Ok(None)
-                    }
-                    std::io::ErrorKind::TimedOut => {
-                        Err(NodegetError::Other("ICMP ping timeout".to_owned()))
-                    }
-                    _ => Err(NodegetError::Other(format!("ICMP ping error: {e}"))),
-                }
+                debug!(
+                    "ICMP DGRAM socket creation failed: kind={:?}, os_error={:?}, msg={e}",
+                    e.kind(),
+                    e.raw_os_error()
+                );
+                // 标记为不可用，后续不再尝试
+                flag.store(false, Ordering::Relaxed);
+                return Ok(None);
             }
+        };
+
+        // socket 创建成功，执行 ping —— 此后的错误都是真实的 ping 错误，不应 fallback
+        let id: u16 = random();
+        let packet = build_echo_request(is_v6, id, 0, &ICMP_PAYLOAD);
+
+        let result = tokio::task::spawn_blocking(move || {
+            dgram_ping_blocking(socket, target, id, packet)
+        })
+        .await
+        .map_err(|e| NodegetError::Other(format!("ping task join error: {e}")))?;
+
+        match result {
+            Ok(d) => Ok(Some(d)),
+            Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {
+                Err(NodegetError::Other("ICMP ping timeout".to_owned()))
+            }
+            Err(e) => Err(NodegetError::Other(format!("ICMP ping error: {e}"))),
         }
     }
 }
@@ -211,13 +208,13 @@ mod dgram {
 // ─── surge_ping fallback (raw socket, 需要 root / CAP_NET_RAW) ─────────
 mod raw {
     use super::*;
-    use surge_ping::{Client, Config, ICMP, PingIdentifier, PingSequence, SurgeError};
+    use surge_ping::{Client, Config, ICMP, PingIdentifier, PingSequence};
     use tokio::sync::{Mutex, OnceCell};
 
     static GLOBAL_ICMP_V4_CLIENT: OnceCell<Mutex<Client>> = OnceCell::const_new();
     static GLOBAL_ICMP_V6_CLIENT: OnceCell<Mutex<Client>> = OnceCell::const_new();
 
-    async fn ping_v4_target(target: IpAddr) -> std::result::Result<Duration, SurgeError> {
+    async fn ping_v4_target(target: IpAddr) -> Result<Duration> {
         let client_mutex = GLOBAL_ICMP_V4_CLIENT
             .get_or_init(|| async {
                 let config = Config::builder().kind(ICMP::V4).build();
@@ -236,9 +233,10 @@ mod raw {
             .ping(PingSequence(0), &ICMP_PAYLOAD)
             .await
             .map(|(_packet, duration)| duration)
+            .map_err(|e| NodegetError::Other(format!("{e}")))
     }
 
-    async fn ping_v6_target(target: IpAddr) -> std::result::Result<Duration, SurgeError> {
+    async fn ping_v6_target(target: IpAddr) -> Result<Duration> {
         let client_mutex = GLOBAL_ICMP_V6_CLIENT
             .get_or_init(|| async {
                 let config = Config::builder().kind(ICMP::V6).build();
@@ -257,17 +255,14 @@ mod raw {
             .ping(PingSequence(0), &ICMP_PAYLOAD)
             .await
             .map(|(_packet, duration)| duration)
+            .map_err(|e| NodegetError::Other(format!("{e}")))
     }
 
     pub async fn ping(target: IpAddr) -> Result<Duration> {
         if target.is_ipv4() {
-            ping_v4_target(target)
-                .await
-                .map_err(|e| NodegetError::Other(format!("{e}")))
+            ping_v4_target(target).await
         } else {
-            ping_v6_target(target)
-                .await
-                .map_err(|e| NodegetError::Other(format!("{e}")))
+            ping_v6_target(target).await
         }
     }
 }
@@ -284,9 +279,7 @@ async fn resolve_target(target: &str) -> Result<IpAddr> {
         }),
         Err(e) => {
             error!("Resolving host error: {e}");
-            Err(NodegetError::Other(format!(
-                "Resolving host error: {e}"
-            )))
+            Err(NodegetError::Other(format!("Resolving host error: {e}")))
         }
     }
 }
@@ -296,8 +289,8 @@ async fn resolve_target(target: &str) -> Result<IpAddr> {
 /// 对目标执行 ICMP Ping
 ///
 /// 非 Windows 平台优先使用 unprivileged ICMP socket（SOCK_DGRAM），
-/// 不需要 root 权限。如果系统不支持或权限不足，自动 fallback 到
-/// surge_ping（raw socket，需要 root / CAP_NET_RAW）。
+/// 不需要 root 权限。如果系统不支持或权限不足（仅在 socket 创建阶段判断），
+/// 自动 fallback 到 surge_ping（raw socket，需要 root / CAP_NET_RAW）。
 ///
 /// Windows 平台直接使用 surge_ping。
 pub async fn ping_target(target: String) -> Result<Duration> {
@@ -309,8 +302,8 @@ pub async fn ping_target(target: String) -> Result<Duration> {
         match dgram::try_ping(ip).await {
             Ok(Some(duration)) => return Ok(duration),
             Ok(None) => {
-                // 不支持，fallback
-                warn!("Unprivileged ICMP socket unavailable for {target}, using raw socket fallback");
+                // socket 创建失败，fallback（仅首次会打印）
+                warn!("Unprivileged ICMP socket unavailable, using raw socket fallback");
             }
             Err(e) => return Err(e),
         }
