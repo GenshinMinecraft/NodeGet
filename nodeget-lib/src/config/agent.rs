@@ -9,8 +9,10 @@ use tokio::fs;
 pub struct AgentConfig {
     // 日志级别
     pub log_level: Option<String>,
-    // 监控数据上报间隔（毫秒）
-    pub monitoring_report_interval_ms: Option<u64>,
+    // 动态监控数据上报间隔（毫秒），默认 1000（1 秒）
+    pub dynamic_report_interval_ms: Option<u64>,
+    // 静态监控数据上报间隔（毫秒），默认 300000（5 分钟）
+    pub static_report_interval_ms: Option<u64>,
 
     // Agent UUID，默认自动生成
     #[serde(deserialize_with = "deserialize_uuid_or_auto")]

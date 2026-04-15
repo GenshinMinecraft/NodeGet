@@ -5,8 +5,11 @@
 # 如果你正在测试或遇到问题，请至少选择 debug
 log_level = "info"
 
-# 监控数据上报间隔（毫秒），默认 1000
-monitoring_report_interval_ms = 1000
+# 动态监控数据上报间隔（毫秒），默认 1000
+dynamic_report_interval_ms = 1000
+
+# 静态监控数据上报间隔（毫秒），默认 300000（5 分钟）
+# static_report_interval_ms = 300000
 
 # Agent 的 Uuid，建议设置为 auto_gen 以自动生成，根据系统环境自动生成，可保证数据不冲突（概率极小）
 # 如果不是 auto_gen，请自行确保每个 Agent 的 uuid 唯一，否则可能导致数据混乱或 UB

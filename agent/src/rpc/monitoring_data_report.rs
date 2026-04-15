@@ -10,7 +10,8 @@ use tokio_tungstenite::tungstenite::{Message, Utf8Bytes};
 
 // 处理静态监控数据上报
 //
-// 该函数每隔 1 分钟刷新并获取静态监控数据（如 CPU、系统、GPU 基本信息），然后将其发送到配置的服务器
+// 该函数按照配置的间隔时间刷新并获取静态监控数据（如 CPU、系统、GPU 基本信息），然后将其发送到配置的服务器
+// 默认间隔时间为 5 分钟
 pub async fn handle_static_monitoring_data_report() {
     let agent_config = AGENT_CONFIG
         .get()
@@ -19,7 +20,8 @@ pub async fn handle_static_monitoring_data_report() {
         .expect("AGENT_CONFIG lock poisoned")
         .clone();
 
-    let mut ticker = interval(Duration::from_mins(1));
+    let interval_ms = agent_config.static_report_interval_ms.unwrap_or(300_000);
+    let mut ticker = interval(Duration::from_millis(interval_ms));
     ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
     loop {
@@ -63,7 +65,7 @@ pub async fn handle_dynamic_monitoring_data_report() {
         .read()
         .expect("AGENT_CONFIG lock poisoned")
         .clone();
-    let interval_ms = agent_config.monitoring_report_interval_ms.unwrap_or(1000);
+    let interval_ms = agent_config.dynamic_report_interval_ms.unwrap_or(1000);
 
     let mut ticker = interval(Duration::from_millis(interval_ms));
     ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
