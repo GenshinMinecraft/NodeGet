@@ -5,10 +5,16 @@ use sea_orm::{DatabaseConnection, DbBackend, FromQueryResult, QuerySelect, State
 use tracing::{debug, trace};
 
 // 引入实体模块
-use crate::entity::{crontab_result, dynamic_monitoring, kv, static_monitoring, task};
+use crate::entity::{
+    crontab_result, dynamic_monitoring, dynamic_monitoring_summary, kv, static_monitoring, task,
+};
 
 /// 验证表名是否合法（防止SQL注入）
-const ALLOWED_MONITORING_TABLES: &[&str] = &["static_monitoring", "dynamic_monitoring"];
+const ALLOWED_MONITORING_TABLES: &[&str] = &[
+    "static_monitoring",
+    "dynamic_monitoring",
+    "dynamic_monitoring_summary",
+];
 
 /// `PostgreSQL` 优化版本
 pub async fn cleanup_expired_data_postgres(db: &DatabaseConnection) -> Result<CleanupResult> {
@@ -29,6 +35,13 @@ pub async fn cleanup_expired_data_postgres(db: &DatabaseConnection) -> Result<Cl
         if let Some(limit) = config.dynamic_monitoring_limit {
             let deleted = cleanup_dynamic_monitoring(db, &config.agent_uuid, limit).await?;
             result.dynamic_monitoring += deleted;
+        }
+
+        // 清理 dynamic_monitoring_summary
+        if let Some(limit) = config.dynamic_monitoring_summary_limit {
+            let deleted =
+                cleanup_dynamic_monitoring_summary(db, &config.agent_uuid, limit).await?;
+            result.dynamic_monitoring_summary += deleted;
         }
 
         // 清理 task
@@ -59,6 +72,7 @@ async fn get_cleanup_configs_postgres(db: &DatabaseConnection) -> Result<Vec<Cle
             namespace as agent_uuid,
             MAX(CASE WHEN key = 'database_limit_static_monitoring' THEN value #>> '{}' END) as static_limit,
             MAX(CASE WHEN key = 'database_limit_dynamic_monitoring' THEN value #>> '{}' END) as dynamic_limit,
+            MAX(CASE WHEN key = 'database_limit_dynamic_monitoring_summary' THEN value #>> '{}' END) as dynamic_summary_limit,
             MAX(CASE WHEN key = 'database_limit_task' THEN value #>> '{}' END) as task_limit
         FROM kv
         WHERE namespace ~ $1
@@ -72,6 +86,7 @@ async fn get_cleanup_configs_postgres(db: &DatabaseConnection) -> Result<Vec<Cle
     let keys: Vec<String> = vec![
         "database_limit_static_monitoring".to_string(),
         "database_limit_dynamic_monitoring".to_string(),
+        "database_limit_dynamic_monitoring_summary".to_string(),
         "database_limit_task".to_string(),
     ];
 
@@ -89,6 +104,9 @@ async fn get_cleanup_configs_postgres(db: &DatabaseConnection) -> Result<Vec<Cle
             agent_uuid: row.agent_uuid,
             static_monitoring_limit: row.static_limit.and_then(|s| s.parse().ok()),
             dynamic_monitoring_limit: row.dynamic_limit.and_then(|s| s.parse().ok()),
+            dynamic_monitoring_summary_limit: row
+                .dynamic_summary_limit
+                .and_then(|s| s.parse().ok()),
             task_limit: row.task_limit.and_then(|s| s.parse().ok()),
             crontab_result_limit: None,
         })
@@ -158,6 +176,41 @@ async fn cleanup_dynamic_monitoring(
     let result = dynamic_monitoring::Entity::delete_many()
         .filter(dynamic_monitoring::Column::Uuid.eq(Uuid::parse_str(agent_uuid)?))
         .filter(dynamic_monitoring::Column::Timestamp.lt(cutoff_timestamp))
+        .exec(db)
+        .await?;
+
+    Ok(result.rows_affected)
+}
+
+/// 清理 `dynamic_monitoring_summary` 表
+async fn cleanup_dynamic_monitoring_summary(
+    db: &DatabaseConnection,
+    agent_uuid: &str,
+    limit_millis: i64,
+) -> Result<u64> {
+    trace!(target: "db", agent_uuid = %agent_uuid, "cleaning dynamic monitoring summary (postgres)");
+    // 首先查询该 agent 的最大 timestamp (uuid 是 String 类型)
+    let max_timestamp: Option<i64> = dynamic_monitoring_summary::Entity::find()
+        .filter(dynamic_monitoring_summary::Column::Uuid.eq(agent_uuid))
+        .select_only()
+        .column_as(
+            dynamic_monitoring_summary::Column::Timestamp.max(),
+            "max_ts",
+        )
+        .into_tuple()
+        .one(db)
+        .await?;
+
+    let max_ts = match max_timestamp {
+        Some(ts) => ts,
+        None => return Ok(0),
+    };
+
+    let cutoff_timestamp = max_ts - limit_millis;
+
+    let result = dynamic_monitoring_summary::Entity::delete_many()
+        .filter(dynamic_monitoring_summary::Column::Uuid.eq(agent_uuid))
+        .filter(dynamic_monitoring_summary::Column::Timestamp.lt(cutoff_timestamp))
         .exec(db)
         .await?;
 
@@ -279,6 +332,7 @@ struct ConfigRow {
     agent_uuid: String,
     static_limit: Option<String>,
     dynamic_limit: Option<String>,
+    dynamic_summary_limit: Option<String>,
     task_limit: Option<String>,
 }
 

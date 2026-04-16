@@ -13,6 +13,7 @@ use tracing::{debug, info};
 pub struct CleanupResult {
     pub static_monitoring: u64,
     pub dynamic_monitoring: u64,
+    pub dynamic_monitoring_summary: u64,
     pub task: u64,
     pub crontab_result: u64,
 }

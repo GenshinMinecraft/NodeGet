@@ -5,10 +5,11 @@ Server，调用者可按条件查询历史数据。
 
 ## 数据类型
 
-监控数据分为两大类：
+监控数据分为三大类：
 
 - **StaticMonitoringData**: 静态信息，采集后一般不会变化（CPU 型号、系统版本、GPU 型号等）
 - **DynamicMonitoringData**: 动态信息，随系统实时变化（CPU 使用率、内存、磁盘、网络等）
+- **DynamicMonitoringSummaryData**: 动态摘要信息，将动态数据的关键指标扁平化存储（非 JSON），便于高效查询与聚合
 
 ## 上报结构体
 
@@ -281,6 +282,78 @@ pub struct DynamicGpuData {
 }
 ```
 
+### DynamicMonitoringSummaryData
+
+动态摘要数据将 DynamicMonitoringData 中的关键指标扁平化为独立列存储，所有字段（除 `uuid` 和 `time`）均为可选。
+
+```rust
+pub struct DynamicMonitoringSummaryData {
+    pub uuid: String,                       // Agent UUID
+    pub time: u64,                          // 毫秒时间戳
+    pub cpu_usage: Option<f64>,             // CPU 总使用率 (0~100)
+    pub gpu_usage: Option<f64>,             // GPU 使用率 (0~100)
+    pub used_swap: Option<i64>,             // 已用 Swap (字节)
+    pub total_swap: Option<i64>,            // 总 Swap (字节)
+    pub used_memory: Option<i64>,           // 已用内存 (字节)
+    pub total_memory: Option<i64>,          // 总内存 (字节)
+    pub available_memory: Option<i64>,      // 可用内存 (字节)
+    pub load_one: Option<f64>,              // 1 分钟负载
+    pub load_five: Option<f64>,             // 5 分钟负载
+    pub load_fifteen: Option<f64>,          // 15 分钟负载
+    pub uptime: Option<i64>,               // 运行时间 (秒)
+    pub boot_time: Option<i64>,            // 启动时间 (秒时间戳)
+    pub process_count: Option<i64>,        // 进程数
+    pub total_space: Option<i64>,          // 磁盘总空间 (字节)
+    pub available_space: Option<i64>,      // 磁盘可用空间 (字节)
+    pub read_speed: Option<i64>,           // 磁盘读速度 (字节/秒)
+    pub write_speed: Option<i64>,          // 磁盘写速度 (字节/秒)
+    pub tcp_connections: Option<i64>,      // TCP 连接数
+    pub udp_connections: Option<i64>,      // UDP 连接数
+    pub total_received: Option<i64>,       // 网络总接收 (字节)
+    pub total_transmitted: Option<i64>,    // 网络总发送 (字节)
+    pub transmit_speed: Option<i64>,       // 网络发送速度 (字节/秒)
+    pub receive_speed: Option<i64>,        // 网络接收速度 (字节/秒)
+}
+```
+
+JSON 示例：
+
+```json
+{
+  "uuid": "e8583352-39e8-5a5b-b66c-e450689088fd",
+  "time": 1769344168646,
+  "cpu_usage": 4.04,
+  "gpu_usage": 5.0,
+  "used_swap": 0,
+  "total_swap": 0,
+  "used_memory": 27062329344,
+  "total_memory": 68501925888,
+  "available_memory": 41439596544,
+  "load_one": 0.0,
+  "load_five": 0.0,
+  "load_fifteen": 0.0,
+  "uptime": 6970,
+  "boot_time": 1769337198,
+  "process_count": 313,
+  "total_space": 322057531392,
+  "available_space": 91563786240,
+  "read_speed": 35741,
+  "write_speed": 49550,
+  "tcp_connections": 165,
+  "udp_connections": 67,
+  "total_received": 527863209,
+  "total_transmitted": 484144450,
+  "transmit_speed": 1626,
+  "receive_speed": 5559
+}
+```
+
+与 DynamicMonitoringData 的区别：
+
+- 所有字段均为扁平的基本类型（非嵌套 JSON），便于数据库直接索引和聚合
+- 除 `uuid` 和 `time` 外，所有字段均为可选，可按需上报
+- 适合用于仪表盘展示、趋势分析等场景
+
 ### 注意事项
 
 - 所有字段都是必需的，若没有请留空（而不是不定义或传 `null`）
@@ -296,6 +369,10 @@ pub struct DynamicGpuData {
 
 - **StaticDataQueryField**: `cpu` / `system` / `gpu`
 - **DynamicDataQueryField**: `cpu` / `ram` / `load` / `system` / `disk` / `network` / `gpu`
+- **DynamicSummaryQueryField**: `cpu_usage` / `gpu_usage` / `used_swap` / `total_swap` / `used_memory` / `total_memory` /
+  `available_memory` / `load_one` / `load_five` / `load_fifteen` / `uptime` / `boot_time` / `process_count` / `total_space` /
+  `available_space` / `read_speed` / `write_speed` / `tcp_connections` / `udp_connections` / `total_received` /
+  `total_transmitted` / `transmit_speed` / `receive_speed`
 
 ```rust
 #[serde(rename_all = "snake_case")]
@@ -303,6 +380,15 @@ pub enum StaticDataQueryField { Cpu, System, Gpu }
 
 #[serde(rename_all = "snake_case")]
 pub enum DynamicDataQueryField { Cpu, Ram, Load, System, Disk, Network, Gpu }
+
+#[serde(rename_all = "snake_case")]
+pub enum DynamicSummaryQueryField {
+    CpuUsage, GpuUsage, UsedSwap, TotalSwap, UsedMemory, TotalMemory,
+    AvailableMemory, LoadOne, LoadFive, LoadFifteen, Uptime, BootTime,
+    ProcessCount, TotalSpace, AvailableSpace, ReadSpeed, WriteSpeed,
+    TcpConnections, UdpConnections, TotalReceived, TotalTransmitted,
+    TransmitSpeed, ReceiveSpeed,
+}
 ```
 
 当 `fields` 为空时，要求 Token 至少对一种字段有 `Read` 权限即可；当 `fields` 非空时，Token 必须对指定的每个字段都有 `Read`
@@ -354,7 +440,7 @@ JSON 解析示例：
 
 ### AvgQuery 结构体
 
-用于 `agent_query_static_avg` / `agent_query_dynamic_avg` 的参数结构：
+用于 `agent_query_static_avg` / `agent_query_dynamic_avg` / `agent_query_dynamic_summary_avg` 的参数结构：
 
 ```rust
 pub struct StaticDataAvgQuery {
@@ -367,6 +453,14 @@ pub struct StaticDataAvgQuery {
 
 pub struct DynamicDataAvgQuery {
     pub fields: Vec<DynamicDataQueryField>,
+    pub uuid: uuid::Uuid,
+    pub timestamp_from: Option<i64>,
+    pub timestamp_to: Option<i64>,
+    pub points: u64,
+}
+
+pub struct DynamicSummaryAvgQuery {
+    pub fields: Vec<DynamicSummaryQueryField>,
     pub uuid: uuid::Uuid,
     pub timestamp_from: Option<i64>,
     pub timestamp_to: Option<i64>,
@@ -417,9 +511,37 @@ pub struct DynamicResponseItem {
     pub network: Option<Value>,
     pub gpu: Option<Value>,
 }
+
+pub struct DynamicSummaryResponseItem {
+    pub uuid: String,
+    pub timestamp: i64,
+    pub cpu_usage: Option<Value>,
+    pub gpu_usage: Option<Value>,
+    pub used_swap: Option<Value>,
+    pub total_swap: Option<Value>,
+    pub used_memory: Option<Value>,
+    pub total_memory: Option<Value>,
+    pub available_memory: Option<Value>,
+    pub load_one: Option<Value>,
+    pub load_five: Option<Value>,
+    pub load_fifteen: Option<Value>,
+    pub uptime: Option<Value>,
+    pub boot_time: Option<Value>,
+    pub process_count: Option<Value>,
+    pub total_space: Option<Value>,
+    pub available_space: Option<Value>,
+    pub read_speed: Option<Value>,
+    pub write_speed: Option<Value>,
+    pub tcp_connections: Option<Value>,
+    pub udp_connections: Option<Value>,
+    pub total_received: Option<Value>,
+    pub total_transmitted: Option<Value>,
+    pub transmit_speed: Option<Value>,
+    pub receive_speed: Option<Value>,
+}
 ```
 
 ## 相关页面
 
-- [Agent 上报](./agent.md) — `agent_report_static` / `agent_report_dynamic`
+- [Agent 上报](./agent.md) — `agent_report_static` / `agent_report_dynamic` / `agent_report_dynamic_summary`
 - [查询与删除](./query.md) — 查询、分段平均、批量最新、删除

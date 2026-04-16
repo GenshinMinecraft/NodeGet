@@ -894,3 +894,374 @@ pub struct DynamicDataAvgQuery {
   }
 }
 ```
+
+## Query Dynamic Summary
+
+按条件查询动态摘要监控数据。
+
+### 方法
+
+调用方法名为 `agent_query_dynamic_summary`，需要提供以下参数：
+
+```json
+{
+  "token": "demo_token",
+  "dynamic_summary_query": {
+    "fields": ["cpu_usage", "used_memory", "total_memory"],
+    "condition": [
+      { "uuid": "e8583352-39e8-5a5b-b66c-e450689088fd" },
+      { "limit": 10 }
+    ]
+  }
+}
+```
+
+参数结构体：
+
+```rust
+pub struct DynamicSummaryQuery {
+    pub fields: Vec<DynamicSummaryQueryField>,  // 需要返回的字段
+    pub condition: Vec<QueryCondition>,         // 查询条件
+}
+```
+
+- `fields`: 指定返回哪些数据字段，可选值为 `cpu_usage` / `gpu_usage` / `used_swap` / `total_swap` / `used_memory` /
+  `total_memory` / `available_memory` / `load_one` / `load_five` / `load_fifteen` / `uptime` / `boot_time` /
+  `process_count` / `total_space` / `available_space` / `read_speed` / `write_speed` / `tcp_connections` /
+  `udp_connections` / `total_received` / `total_transmitted` / `transmit_speed` / `receive_speed`。若为空，返回所有字段
+- `condition`: 查询条件列表，多个条件为 AND 关系
+
+### 权限要求
+
+- **Scope**: 若 `condition` 中包含 `uuid`，需覆盖对应的 `AgentUuid`；若不包含 `uuid`，需要 `Global` Scope
+- **Permission**: `DynamicMonitoringSummary::Read`
+
+权限配置示例：
+
+```json
+{
+  "scopes": [
+    {"agent_uuid": "e8583352-39e8-5a5b-b66c-e450689088fd"}
+  ],
+  "permissions": [
+    {"dynamic_monitoring_summary": "read"}
+  ]
+}
+```
+
+### 返回值
+
+返回匹配记录的数组，每条记录固定包含 `uuid` 和 `timestamp`，其余字段按 `fields` 按需返回：
+
+```json
+[
+  {
+    "uuid": "e8583352-39e8-5a5b-b66c-e450689088fd",
+    "timestamp": 1769344168646,
+    "cpu_usage": 4.04,
+    "used_memory": 27062329344,
+    "total_memory": 68501925888
+  }
+]
+```
+
+### 完整示例
+
+请求：
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "agent_query_dynamic_summary",
+  "params": {
+    "token": "demo_key:demo_secret",
+    "dynamic_summary_query": {
+      "fields": ["cpu_usage", "used_memory", "total_memory"],
+      "condition": [
+        { "uuid": "e8583352-39e8-5a5b-b66c-e450689088fd" },
+        { "timestamp_from": 1769344160000 },
+        { "limit": 5 }
+      ]
+    }
+  },
+  "id": 1
+}
+```
+
+响应：
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": [
+    {
+      "uuid": "e8583352-39e8-5a5b-b66c-e450689088fd",
+      "timestamp": 1769344168646,
+      "cpu_usage": 4.04,
+      "used_memory": 27062329344,
+      "total_memory": 68501925888
+    }
+  ]
+}
+```
+
+## Query Dynamic Summary Avg
+
+按时间段分段聚合查询动态摘要监控数据的平均值。仅支持 PostgreSQL。
+
+### 方法
+
+调用方法名为 `agent_query_dynamic_summary_avg`，需要提供以下参数：
+
+```json
+{
+  "token": "demo_token",
+  "dynamic_summary_avg_query": {
+    "fields": ["cpu_usage", "used_memory", "load_one"],
+    "uuid": "830cec66-8fc9-5c21-9e2d-2da2b2f2d3b3",
+    "timestamp_from": 1769344168646,
+    "timestamp_to": 1769347768646,
+    "points": 100
+  }
+}
+```
+
+参数结构体：
+
+```rust
+pub struct DynamicSummaryAvgQuery {
+    pub fields: Vec<DynamicSummaryQueryField>,
+    pub uuid: uuid::Uuid,
+    pub timestamp_from: Option<i64>,
+    pub timestamp_to: Option<i64>,
+    pub points: u64,                        // 必须 >= 1
+}
+```
+
+- `fields`: 需要聚合的字段
+- `uuid`: 目标 Agent UUID（必填）
+- `timestamp_from` / `timestamp_to`: 可选，限定时间范围
+- `points`: 将筛选后的数据范围分成多少份做平均
+
+由于摘要数据为扁平列存储，聚合计算直接对列做 `AVG()`，无需 JSON 提取，效率更高。
+
+### 权限要求
+
+- **Scope**: `AgentUuid` — 必须覆盖 `uuid` 参数指定的 Agent
+- **Permission**: `DynamicMonitoringSummary::Read`
+
+### 返回值
+
+返回 `points` 份聚合结果的数组，固定包含 `uuid` 和 `timestamp`：
+
+```json
+[
+  {
+    "uuid": "830cec66-8fc9-5c21-9e2d-2da2b2f2d3b3",
+    "timestamp": 1769344200000,
+    "cpu_usage": 5.2,
+    "used_memory": 26501925888,
+    "load_one": 0.5
+  }
+]
+```
+
+### 完整示例
+
+请求：
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "agent_query_dynamic_summary_avg",
+  "params": {
+    "token": "demo_key:demo_secret",
+    "dynamic_summary_avg_query": {
+      "fields": ["cpu_usage", "used_memory"],
+      "uuid": "830cec66-8fc9-5c21-9e2d-2da2b2f2d3b3",
+      "timestamp_from": 1769344168646,
+      "timestamp_to": 1769347768646,
+      "points": 100
+    }
+  },
+  "id": 1
+}
+```
+
+响应：
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": [
+    {
+      "uuid": "830cec66-8fc9-5c21-9e2d-2da2b2f2d3b3",
+      "timestamp": 1769344200000,
+      "cpu_usage": 5.2,
+      "used_memory": 26501925888
+    }
+  ]
+}
+```
+
+## Dynamic Summary Multi Last Query
+
+批量获取多个 Agent 的最新一条动态摘要监控数据。等价于为每个 UUID 执行 `agent_query_dynamic_summary` 并设置 `condition: ["last"]`。
+
+### 方法
+
+调用方法名为 `agent_dynamic_summary_multi_last_query`，需要提供以下参数：
+
+```json
+{
+  "token": "demo_token",
+  "uuids": [
+    "e8583352-39e8-5a5b-b66c-e450689088fd",
+    "830cec66-8fc9-5c21-9e2d-2da2b2f2d3b3"
+  ],
+  "fields": ["cpu_usage", "used_memory", "total_memory"]
+}
+```
+
+参数说明：
+
+- `token`: Token
+- `uuids`: Agent UUID 列表。若为空数组，直接返回 `[]`
+- `fields`: 需要返回的字段，可选值同 `DynamicSummaryQueryField`
+
+### 权限要求
+
+- **Scope**: `AgentUuid` — 必须覆盖 `uuids` 中的每一个 UUID
+- **Permission**: `DynamicMonitoringSummary::Read`
+
+### 返回值
+
+返回数组，每个 UUID 最多一条最新记录：
+
+```json
+[
+  {
+    "uuid": "e8583352-39e8-5a5b-b66c-e450689088fd",
+    "timestamp": 1769344168646,
+    "cpu_usage": 4.04,
+    "used_memory": 27062329344,
+    "total_memory": 68501925888
+  }
+]
+```
+
+### 完整示例
+
+请求：
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "agent_dynamic_summary_multi_last_query",
+  "params": {
+    "token": "demo_key:demo_secret",
+    "uuids": [
+      "e8583352-39e8-5a5b-b66c-e450689088fd"
+    ],
+    "fields": ["cpu_usage", "used_memory"]
+  },
+  "id": 1
+}
+```
+
+响应：
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": [
+    {
+      "uuid": "e8583352-39e8-5a5b-b66c-e450689088fd",
+      "timestamp": 1769344168646,
+      "cpu_usage": 4.04,
+      "used_memory": 27062329344
+    }
+  ]
+}
+```
+
+## Delete Dynamic Summary
+
+删除历史动态摘要监控数据。
+
+### 方法
+
+调用方法名为 `agent_delete_dynamic_summary`，需要提供以下参数：
+
+```json
+{
+  "token": "demo_token",
+  "conditions": [
+    { "uuid": "830cec66-8fc9-5c21-9e2d-2da2b2f2d3b3" },
+    { "timestamp_to": 1769344168646 }
+  ]
+}
+```
+
+参数说明：
+
+- `token`: Token
+- `conditions`: `Vec<QueryCondition>` — 使用与查询相同的条件结构体。删除语义与查询语义一致
+
+注意事项：
+
+- 若包含 `last` / `limit`，会按时间倒序选中对应记录后删除
+- 多个条件为 AND 关系
+
+### 权限要求
+
+- **Scope**: 若 `conditions` 中包含 `uuid`，需覆盖对应的 `AgentUuid`；若不包含 `uuid`，需要 `Global` Scope
+- **Permission**: `DynamicMonitoringSummary::Delete`
+
+### 返回值
+
+删除成功后返回：
+
+```json
+{
+  "success": true,
+  "deleted": 1500,
+  "condition_count": 2
+}
+```
+
+### 完整示例
+
+请求：
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "agent_delete_dynamic_summary",
+  "params": {
+    "token": "demo_key:demo_secret",
+    "conditions": [
+      { "uuid": "830cec66-8fc9-5c21-9e2d-2da2b2f2d3b3" },
+      { "timestamp_to": 1769344168646 }
+    ]
+  },
+  "id": 1
+}
+```
+
+响应：
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "success": true,
+    "deleted": 1500,
+    "condition_count": 2
+  }
+}
+```

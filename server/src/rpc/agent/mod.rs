@@ -2,24 +2,32 @@ use crate::rpc::RpcHelper;
 use crate::rpc::{rpc_exec, token_identity};
 use jsonrpsee::core::{RpcResult, async_trait};
 use jsonrpsee::proc_macros::rpc;
-use nodeget_lib::monitoring::data_structure::{DynamicMonitoringData, StaticMonitoringData};
+use nodeget_lib::monitoring::data_structure::{
+    DynamicMonitoringData, DynamicMonitoringSummaryData, StaticMonitoringData,
+};
 use nodeget_lib::monitoring::query::{
-    DynamicDataAvgQuery, DynamicDataQuery, DynamicDataQueryField, QueryCondition,
-    StaticDataAvgQuery, StaticDataQuery, StaticDataQueryField,
+    DynamicDataAvgQuery, DynamicDataQuery, DynamicDataQueryField, DynamicSummaryAvgQuery,
+    DynamicSummaryQuery, DynamicSummaryQueryField, QueryCondition, StaticDataAvgQuery,
+    StaticDataQuery, StaticDataQueryField,
 };
 use serde_json::value::RawValue;
 use tracing::Instrument;
 use uuid::Uuid;
 
 mod delete_dynamic;
+mod delete_dynamic_summary;
 mod delete_static;
 mod query_dynamic;
 mod query_dynamic_avg;
 mod query_dynamic_multi_last;
+pub(crate) mod query_dynamic_summary;
+mod query_dynamic_summary_avg;
+mod query_dynamic_summary_multi_last;
 mod query_static;
 mod query_static_avg;
 mod query_static_multi_last;
 mod report_dynamic;
+mod report_dynamic_summary;
 mod report_static;
 
 #[rpc(server, namespace = "agent")]
@@ -91,6 +99,42 @@ pub trait Rpc {
 
     #[method(name = "delete_dynamic")]
     async fn delete_dynamic(
+        &self,
+        token: String,
+        conditions: Vec<QueryCondition>,
+    ) -> RpcResult<Box<RawValue>>;
+
+    #[method(name = "report_dynamic_summary")]
+    async fn report_dynamic_summary(
+        &self,
+        token: String,
+        data: DynamicMonitoringSummaryData,
+    ) -> RpcResult<Box<RawValue>>;
+
+    #[method(name = "query_dynamic_summary")]
+    async fn query_dynamic_summary(
+        &self,
+        token: String,
+        query: DynamicSummaryQuery,
+    ) -> RpcResult<Box<RawValue>>;
+
+    #[method(name = "query_dynamic_summary_avg")]
+    async fn query_dynamic_summary_avg(
+        &self,
+        token: String,
+        query: DynamicSummaryAvgQuery,
+    ) -> RpcResult<Box<RawValue>>;
+
+    #[method(name = "dynamic_summary_multi_last_query")]
+    async fn dynamic_summary_multi_last_query(
+        &self,
+        token: String,
+        uuids: Vec<Uuid>,
+        fields: Vec<DynamicSummaryQueryField>,
+    ) -> RpcResult<Box<RawValue>>;
+
+    #[method(name = "delete_dynamic_summary")]
+    async fn delete_dynamic_summary(
         &self,
         token: String,
         conditions: Vec<QueryCondition>,
@@ -233,5 +277,76 @@ impl RpcServer for AgentRpcImpl {
         async { rpc_exec!(delete_dynamic::delete_dynamic(token, conditions).await) }
             .instrument(span)
             .await
+    }
+
+    async fn report_dynamic_summary(
+        &self,
+        token: String,
+        data: DynamicMonitoringSummaryData,
+    ) -> RpcResult<Box<RawValue>> {
+        let (tk, un) = token_identity(&token);
+        let span = tracing::info_span!(target: "monitoring", "agent::report_dynamic_summary", token_key = tk, username = un, uuid = %data.uuid);
+        async { rpc_exec!(report_dynamic_summary::report_dynamic_summary(token, data).await) }
+            .instrument(span)
+            .await
+    }
+
+    async fn query_dynamic_summary(
+        &self,
+        token: String,
+        query: DynamicSummaryQuery,
+    ) -> RpcResult<Box<RawValue>> {
+        let (tk, un) = token_identity(&token);
+        let span = tracing::info_span!(target: "monitoring", "agent::query_dynamic_summary", token_key = tk, username = un, query = ?query);
+        async {
+            rpc_exec!(query_dynamic_summary::query_dynamic_summary(token, query).await)
+        }
+        .instrument(span)
+        .await
+    }
+
+    async fn query_dynamic_summary_avg(
+        &self,
+        token: String,
+        query: DynamicSummaryAvgQuery,
+    ) -> RpcResult<Box<RawValue>> {
+        let (tk, un) = token_identity(&token);
+        let span = tracing::info_span!(target: "monitoring", "agent::query_dynamic_summary_avg", token_key = tk, username = un, query = ?query);
+        async {
+            rpc_exec!(query_dynamic_summary_avg::query_dynamic_summary_avg(token, query).await)
+        }
+        .instrument(span)
+        .await
+    }
+
+    async fn dynamic_summary_multi_last_query(
+        &self,
+        token: String,
+        uuids: Vec<Uuid>,
+        fields: Vec<DynamicSummaryQueryField>,
+    ) -> RpcResult<Box<RawValue>> {
+        let (tk, un) = token_identity(&token);
+        let span = tracing::info_span!(target: "monitoring", "agent::dynamic_summary_multi_last_query", token_key = tk, username = un, uuids = ?uuids, fields = ?fields);
+        async {
+            rpc_exec!(
+                query_dynamic_summary_multi_last::dynamic_summary_multi_last_query(token, uuids, fields).await
+            )
+        }
+        .instrument(span)
+        .await
+    }
+
+    async fn delete_dynamic_summary(
+        &self,
+        token: String,
+        conditions: Vec<QueryCondition>,
+    ) -> RpcResult<Box<RawValue>> {
+        let (tk, un) = token_identity(&token);
+        let span = tracing::info_span!(target: "monitoring", "agent::delete_dynamic_summary", token_key = tk, username = un, conditions = ?conditions);
+        async {
+            rpc_exec!(delete_dynamic_summary::delete_dynamic_summary(token, conditions).await)
+        }
+        .instrument(span)
+        .await
     }
 }

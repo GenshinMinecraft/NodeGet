@@ -5,6 +5,7 @@ pub struct CleanupConfig {
     pub agent_uuid: String,
     pub static_monitoring_limit: Option<i64>,
     pub dynamic_monitoring_limit: Option<i64>,
+    pub dynamic_monitoring_summary_limit: Option<i64>,
     pub task_limit: Option<i64>,
     pub crontab_result_limit: Option<i64>,
 }

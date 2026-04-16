@@ -8,6 +8,13 @@ log_level = "info"
 # 动态监控数据上报间隔（毫秒），默认 1000
 dynamic_report_interval_ms = 1000
 
+# 动态监控摘要数据上报间隔（毫秒），默认 1000
+# 必须是 dynamic_report_interval_ms 的因数
+# 即 dynamic_report_interval_ms 必须是该值的整数倍
+# 例如 dynamic_report_interval_ms = 4000, dynamic_summary_report_interval_ms = 2000
+# 则每 2 秒上报一次摘要，每 4 秒上报一次完整动态数据
+# dynamic_summary_report_interval_ms = 1000
+
 # 静态监控数据上报间隔（毫秒），默认 300000（5 分钟）
 # static_report_interval_ms = 300000
 

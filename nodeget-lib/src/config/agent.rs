@@ -11,6 +11,9 @@ pub struct AgentConfig {
     pub log_level: Option<String>,
     // 动态监控数据上报间隔（毫秒），默认 1000（1 秒）
     pub dynamic_report_interval_ms: Option<u64>,
+    // 动态监控摘要数据上报间隔（毫秒），默认 1000（1 秒）
+    // 必须是 dynamic_report_interval_ms 的因数（即 dynamic_report_interval_ms 是它的整数倍）
+    pub dynamic_summary_report_interval_ms: Option<u64>,
     // 静态监控数据上报间隔（毫秒），默认 300000（5 分钟）
     pub static_report_interval_ms: Option<u64>,
 
@@ -103,6 +106,21 @@ impl AgentConfig {
                     )
                     .into());
                 }
+            }
+        }
+
+        // 校验 dynamic_report_interval_ms 必须是 dynamic_summary_report_interval_ms 的整数倍
+        {
+            let dynamic_interval = config.dynamic_report_interval_ms.unwrap_or(1000);
+            let summary_interval = config.dynamic_summary_report_interval_ms.unwrap_or(1000);
+            if summary_interval == 0 {
+                return Err("dynamic_summary_report_interval_ms must be greater than 0".into());
+            }
+            if dynamic_interval % summary_interval != 0 {
+                return Err(format!(
+                    "dynamic_report_interval_ms ({dynamic_interval}) must be an integer multiple of dynamic_summary_report_interval_ms ({summary_interval})"
+                )
+                .into());
             }
         }
 

@@ -198,3 +198,140 @@ pub struct DynamicResponseItem {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gpu: Option<Value>,
 }
+
+// 动态监控摘要数据查询字段枚举
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+pub enum DynamicSummaryQueryField {
+    CpuUsage,
+    GpuUsage,
+    UsedSwap,
+    TotalSwap,
+    UsedMemory,
+    TotalMemory,
+    AvailableMemory,
+    LoadOne,
+    LoadFive,
+    LoadFifteen,
+    Uptime,
+    BootTime,
+    ProcessCount,
+    TotalSpace,
+    AvailableSpace,
+    ReadSpeed,
+    WriteSpeed,
+    TcpConnections,
+    UdpConnections,
+    TotalReceived,
+    TotalTransmitted,
+    TransmitSpeed,
+    ReceiveSpeed,
+}
+
+impl DynamicSummaryQueryField {
+    /// 获取字段对应的数据库列名
+    #[must_use]
+    pub const fn column_name(&self) -> &'static str {
+        match self {
+            Self::CpuUsage => "cpu_usage",
+            Self::GpuUsage => "gpu_usage",
+            Self::UsedSwap => "used_swap",
+            Self::TotalSwap => "total_swap",
+            Self::UsedMemory => "used_memory",
+            Self::TotalMemory => "total_memory",
+            Self::AvailableMemory => "available_memory",
+            Self::LoadOne => "load_one",
+            Self::LoadFive => "load_five",
+            Self::LoadFifteen => "load_fifteen",
+            Self::Uptime => "uptime",
+            Self::BootTime => "boot_time",
+            Self::ProcessCount => "process_count",
+            Self::TotalSpace => "total_space",
+            Self::AvailableSpace => "available_space",
+            Self::ReadSpeed => "read_speed",
+            Self::WriteSpeed => "write_speed",
+            Self::TcpConnections => "tcp_connections",
+            Self::UdpConnections => "udp_connections",
+            Self::TotalReceived => "total_received",
+            Self::TotalTransmitted => "total_transmitted",
+            Self::TransmitSpeed => "transmit_speed",
+            Self::ReceiveSpeed => "receive_speed",
+        }
+    }
+
+    /// 获取字段的 JSON 键名（与列名相同，因为是扁平列）
+    #[must_use]
+    pub const fn json_key(&self) -> &'static str {
+        self.column_name()
+    }
+}
+
+// 动态监控摘要数据查询结构体
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DynamicSummaryQuery {
+    pub fields: Vec<DynamicSummaryQueryField>,
+    pub condition: Vec<QueryCondition>,
+}
+
+// 动态监控摘要平均值查询结构体
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DynamicSummaryAvgQuery {
+    pub fields: Vec<DynamicSummaryQueryField>,
+    pub uuid: uuid::Uuid,
+    pub timestamp_from: Option<i64>,
+    pub timestamp_to: Option<i64>,
+    pub points: u64,
+}
+
+// 动态监控摘要数据响应项结构体
+#[derive(Serialize)]
+pub struct DynamicSummaryResponseItem {
+    pub uuid: String,
+    pub timestamp: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cpu_usage: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gpu_usage: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub used_swap: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_swap: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub used_memory: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_memory: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub available_memory: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub load_one: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub load_five: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub load_fifteen: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uptime: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub boot_time: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub process_count: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_space: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub available_space: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub read_speed: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub write_speed: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tcp_connections: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub udp_connections: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_received: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_transmitted: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transmit_speed: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub receive_speed: Option<Value>,
+}

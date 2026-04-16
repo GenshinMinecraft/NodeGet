@@ -40,6 +40,101 @@ pub struct DynamicMonitoringData {
     pub gpu: Vec<DynamicGpuData>,
 }
 
+// 动态监控摘要数据结构体，包含扁平化的系统状态摘要信息
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+pub struct DynamicMonitoringSummaryData {
+    // 设备 UUID
+    pub uuid: String,
+    // 时间戳（毫秒）
+    pub time: u64,
+
+    pub cpu_usage: Option<f64>,
+    pub gpu_usage: Option<f64>,
+    pub used_swap: Option<i64>,
+    pub total_swap: Option<i64>,
+    pub used_memory: Option<i64>,
+    pub total_memory: Option<i64>,
+    pub available_memory: Option<i64>,
+    pub load_one: Option<f64>,
+    pub load_five: Option<f64>,
+    pub load_fifteen: Option<f64>,
+    pub uptime: Option<i64>,
+    pub boot_time: Option<i64>,
+    pub process_count: Option<i64>,
+    pub total_space: Option<i64>,
+    pub available_space: Option<i64>,
+    pub read_speed: Option<i64>,
+    pub write_speed: Option<i64>,
+    pub tcp_connections: Option<i64>,
+    pub udp_connections: Option<i64>,
+    pub total_received: Option<i64>,
+    pub total_transmitted: Option<i64>,
+    pub transmit_speed: Option<i64>,
+    pub receive_speed: Option<i64>,
+}
+
+impl From<&DynamicMonitoringData> for DynamicMonitoringSummaryData {
+    fn from(data: &DynamicMonitoringData) -> Self {
+        let total_space: u64 = data.disk.iter().map(|d| d.total_space).sum();
+        let available_space: u64 = data.disk.iter().map(|d| d.available_space).sum();
+        let read_speed: u64 = data.disk.iter().map(|d| d.read_speed).sum();
+        let write_speed: u64 = data.disk.iter().map(|d| d.write_speed).sum();
+
+        let total_received: u64 = data
+            .network
+            .interfaces
+            .iter()
+            .map(|i| i.total_received)
+            .sum();
+        let total_transmitted: u64 = data
+            .network
+            .interfaces
+            .iter()
+            .map(|i| i.total_transmitted)
+            .sum();
+        let receive_speed_net: u64 = data
+            .network
+            .interfaces
+            .iter()
+            .map(|i| i.receive_speed)
+            .sum();
+        let transmit_speed: u64 = data
+            .network
+            .interfaces
+            .iter()
+            .map(|i| i.transmit_speed)
+            .sum();
+
+        Self {
+            uuid: data.uuid.clone(),
+            time: data.time,
+            cpu_usage: Some(data.cpu.total_cpu_usage),
+            gpu_usage: data.gpu.first().map(|g| g.utilization_gpu as f64),
+            used_swap: Some(data.ram.used_swap as i64),
+            total_swap: Some(data.ram.total_swap as i64),
+            used_memory: Some(data.ram.used_memory as i64),
+            total_memory: Some(data.ram.total_memory as i64),
+            available_memory: Some(data.ram.available_memory as i64),
+            load_one: Some(data.load.one),
+            load_five: Some(data.load.five),
+            load_fifteen: Some(data.load.fifteen),
+            uptime: Some(data.system.uptime as i64),
+            boot_time: Some(data.system.boot_time as i64),
+            process_count: Some(data.system.process_count as i64),
+            total_space: Some(total_space as i64),
+            available_space: Some(available_space as i64),
+            read_speed: Some(read_speed as i64),
+            write_speed: Some(write_speed as i64),
+            tcp_connections: Some(data.network.tcp_connections as i64),
+            udp_connections: Some(data.network.udp_connections as i64),
+            total_received: Some(total_received as i64),
+            total_transmitted: Some(total_transmitted as i64),
+            transmit_speed: Some(transmit_speed as i64),
+            receive_speed: Some(receive_speed_net as i64),
+        }
+    }
+}
+
 // CPU 静态信息结构体
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct StaticCPUData {

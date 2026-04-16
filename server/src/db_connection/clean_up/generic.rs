@@ -1,7 +1,9 @@
 use super::CleanupResult;
 use super::config::CleanupConfig;
 use super::utils::{get_limit_millis, is_valid_uuid};
-use crate::entity::{crontab_result, dynamic_monitoring, kv, static_monitoring, task};
+use crate::entity::{
+    crontab_result, dynamic_monitoring, dynamic_monitoring_summary, kv, static_monitoring, task,
+};
 use anyhow::Result;
 use sea_orm::{
     ColumnTrait, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder,
@@ -32,6 +34,13 @@ pub async fn cleanup_expired_data_generic(db: &DatabaseConnection) -> Result<Cle
             result.dynamic_monitoring += deleted;
         }
 
+        // 清理 dynamic_monitoring_summary
+        if let Some(limit) = config.dynamic_monitoring_summary_limit {
+            let deleted =
+                cleanup_dynamic_monitoring_summary_generic(db, &config.agent_uuid, limit).await?;
+            result.dynamic_monitoring_summary += deleted;
+        }
+
         // 清理 task
         if let Some(limit) = config.task_limit {
             let deleted = cleanup_task_generic(db, &config.agent_uuid, limit).await?;
@@ -55,6 +64,7 @@ async fn get_cleanup_configs_generic(db: &DatabaseConnection) -> Result<Vec<Clea
         .filter(kv::Column::Key.is_in([
             "database_limit_static_monitoring",
             "database_limit_dynamic_monitoring",
+            "database_limit_dynamic_monitoring_summary",
             "database_limit_task",
         ]))
         .all(db)
@@ -77,6 +87,7 @@ async fn get_cleanup_configs_generic(db: &DatabaseConnection) -> Result<Vec<Clea
                 agent_uuid: record.namespace.clone(),
                 static_monitoring_limit: None,
                 dynamic_monitoring_limit: None,
+                dynamic_monitoring_summary_limit: None,
                 task_limit: None,
                 crontab_result_limit: None,
             });
@@ -87,6 +98,9 @@ async fn get_cleanup_configs_generic(db: &DatabaseConnection) -> Result<Vec<Clea
             }
             "database_limit_dynamic_monitoring" => {
                 config.dynamic_monitoring_limit = Some(limit_millis);
+            }
+            "database_limit_dynamic_monitoring_summary" => {
+                config.dynamic_monitoring_summary_limit = Some(limit_millis);
             }
             "database_limit_task" => config.task_limit = Some(limit_millis),
             _ => {}
@@ -168,6 +182,44 @@ async fn cleanup_dynamic_monitoring_generic(
     let deleted = dynamic_monitoring::Entity::delete_many()
         .filter(dynamic_monitoring::Column::Uuid.eq(uuid))
         .filter(dynamic_monitoring::Column::Timestamp.lt(min_timestamp))
+        .exec(db)
+        .await?;
+
+    Ok(deleted.rows_affected)
+}
+
+/// 通用版本: 清理 `dynamic_monitoring_summary` 表
+///
+/// # 参数
+/// * `limit_millis` - 保留的毫秒数
+async fn cleanup_dynamic_monitoring_summary_generic(
+    db: &DatabaseConnection,
+    agent_uuid: &str,
+    limit_millis: i64,
+) -> Result<u64> {
+    trace!(target: "db", agent_uuid = %agent_uuid, "cleaning dynamic monitoring summary (generic)");
+
+    // 获取该 agent 的最大 timestamp
+    let max_timestamp: Option<i64> = dynamic_monitoring_summary::Entity::find()
+        .filter(dynamic_monitoring_summary::Column::Uuid.eq(agent_uuid))
+        .select_only()
+        .column(dynamic_monitoring_summary::Column::Timestamp)
+        .order_by_desc(dynamic_monitoring_summary::Column::Timestamp)
+        .into_tuple()
+        .one(db)
+        .await?;
+
+    let Some(max_timestamp) = max_timestamp else {
+        return Ok(0);
+    };
+
+    // 计算需要保留的最小 timestamp
+    let min_timestamp = max_timestamp - limit_millis;
+
+    // 删除旧数据
+    let deleted = dynamic_monitoring_summary::Entity::delete_many()
+        .filter(dynamic_monitoring_summary::Column::Uuid.eq(agent_uuid))
+        .filter(dynamic_monitoring_summary::Column::Timestamp.lt(min_timestamp))
         .exec(db)
         .await?;
 

@@ -72,6 +72,8 @@ pub enum Permission {
     JsWorker(JsWorker),
     // Js Result 权限
     JsResult(JsResult),
+    // 动态监控摘要权限
+    DynamicMonitoringSummary(DynamicMonitoringSummary),
 }
 
 // 静态监控权限枚举
@@ -92,6 +94,18 @@ pub enum StaticMonitoring {
 pub enum DynamicMonitoring {
     // 读取权限，指定可读取的字段类型
     Read(DynamicDataQueryField),
+    // 写入权限
+    Write,
+    // 删除权限
+    Delete,
+}
+
+// 动态监控摘要权限枚举
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DynamicMonitoringSummary {
+    // 读取权限
+    Read,
     // 写入权限
     Write,
     // 删除权限
