@@ -4,7 +4,7 @@ version = "0.0.1"
 edition = "2024"
 
 [dependencies]
-tokio = { version = "1.49.0", default-features = false, features = ["fs"] }
+tokio = { version = "1.48.0", default-features = false, features = ["fs"] }
 uuid = { version = "1.19.0", default-features = false, features = ["std", "v5", "fast-rng", "v4", "serde"] }
 machine-uid = "0.5.4"
 serde = { version = "1.0", features = ["derive"] }
@@ -12,7 +12,7 @@ serde_json = { version = "1.0" }
 toml = { version = "0.9.11", default-features = false, features = ["std", "serde", "parse"] }
 tracing = { version = "0.1", default-features = false, features = ["std"] }
 url = { version = "2.5.8", default-features = false, features = ["std", "serde"] }
-rand = { version = "0.9.2", default-features = false, features = ["std"] }
+rand = { version = "0.10.0", default-features = false, features = ["std"] }
 sha2 = "0.11.0-rc.3"
 thiserror = "2.0.18"
 anyhow = "1.0.100"
@@ -23,4 +23,4 @@ for-agent = []
 for-server = []
 
 [build-dependencies]
-vergen-git2 = { version = "10.0.0-beta.5", features = ["build", "cargo", "rustc"] }
+vergen-gix = { version = "9.0.6", features = ["build", "cargo", "rustc"] }

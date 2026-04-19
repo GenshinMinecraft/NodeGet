@@ -8,13 +8,7 @@
 )]
 
 use nodeget_lib::args_parse::server::{ServerArgs, ServerCommand};
-#[cfg(all(not(target_os = "windows"), feature = "jemalloc"))]
-use tikv_jemallocator::Jemalloc;
 use tracing::info;
-
-#[cfg(all(not(target_os = "windows"), feature = "jemalloc"))]
-#[global_allocator]
-static GLOBAL: Jemalloc = Jemalloc;
 
 // 数据库连接模块
 mod db_connection;

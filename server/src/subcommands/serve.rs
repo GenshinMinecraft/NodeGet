@@ -15,9 +15,6 @@ use crate::rpc::get_modules;
 use crate::rpc_timing::RpcTimingMiddleware;
 
 pub async fn run(config: &nodeget_lib::config::server::ServerConfig) {
-    #[cfg(all(not(target_os = "windows"), feature = "jemalloc"))]
-    spawn_jemalloc_mem_debug_task();
-
     super::init_or_skip_super_token().await;
     debug!(target: "server", "Super token initialization completed");
 
@@ -503,36 +500,4 @@ async fn cleanup_unix_socket_file(path: Option<&str>) {
             tracing::warn!(target: "server", path = %path, error = %e, "Failed to remove unix socket file")
         }
     }
-}
-
-#[cfg(all(not(target_os = "windows"), feature = "jemalloc"))]
-fn spawn_jemalloc_mem_debug_task() {
-    static JEMALLOC_MEM_DEBUG_STARTED: std::sync::OnceLock<()> = std::sync::OnceLock::new();
-    if JEMALLOC_MEM_DEBUG_STARTED.set(()).is_err() {
-        return;
-    }
-
-    tokio::spawn(async {
-        loop {
-            use tikv_jemalloc_ctl::{epoch, stats};
-            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-            if epoch::advance().is_err() {
-                return;
-            }
-
-            let allocated = stats::allocated::read().unwrap();
-            let active = stats::active::read().unwrap();
-            let resident = stats::resident::read().unwrap();
-            let mapped = stats::mapped::read().unwrap();
-
-            tracing::info!(
-                target: "server",
-                allocated_mb = format_args!("{:.2}", allocated as f64 / 1024.0 / 1024.0),
-                active_mb = format_args!("{:.2}", active as f64 / 1024.0 / 1024.0),
-                resident_mb = format_args!("{:.2}", resident as f64 / 1024.0 / 1024.0),
-                mapped_mb = format_args!("{:.2}", mapped as f64 / 1024.0 / 1024.0),
-                "Jemalloc memory stats"
-            );
-        }
-    });
 }

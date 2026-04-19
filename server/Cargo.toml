@@ -51,9 +51,5 @@ llrt_url = { git = "https://github.com/awslabs/llrt.git", default-features = fal
 llrt_stream_web = { git = "https://github.com/awslabs/llrt.git", default-features = false }
 llrt_util = { git = "https://github.com/awslabs/llrt.git", default-features = false }
 
-[target.'cfg(not(target_os = "windows"))'.dependencies]
-tikv-jemallocator = { version = "0.6.1", optional = true }
-tikv-jemalloc-ctl = { version = "0.6.1", features = ["stats"], optional = true }
-
 [features]
-jemalloc = ["tikv-jemallocator", "tikv-jemalloc-ctl"]
+default = []

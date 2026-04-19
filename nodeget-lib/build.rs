@@ -1,28 +1,30 @@
-use vergen_git2::{Build, Cargo, Emitter, Git2, Rustc};
+use vergen_gix::{BuildBuilder, CargoBuilder, Emitter, GixBuilder, RustcBuilder};
 
 fn main() {
-    let build = Build::builder().build_timestamp(true).build();
-    let cargo = Cargo::builder().target_triple(true).build();
-    let git2 = Git2::builder()
+    let build = BuildBuilder::default().build_timestamp(true).build().unwrap();
+    let cargo = CargoBuilder::default().target_triple(true).build().unwrap();
+    let gix = GixBuilder::default()
         .branch(true)
         .sha(true)
         .commit_message(true)
         .commit_timestamp(true)
-        .build();
-    let rustc = Rustc::builder()
+        .build()
+        .unwrap();
+    let rustc = RustcBuilder::default()
         .channel(true)
         .semver(true)
         .commit_date(true)
         .commit_hash(true)
         .llvm_version(true)
-        .build();
+        .build()
+        .unwrap();
 
     Emitter::default()
         .add_instructions(&build)
         .unwrap()
         .add_instructions(&cargo)
         .unwrap()
-        .add_instructions(&git2)
+        .add_instructions(&gix)
         .unwrap()
         .add_instructions(&rustc)
         .unwrap()
