@@ -25,6 +25,7 @@ mod kv;
 mod logging;
 pub(crate) mod monitoring_buffer;
 pub(crate) mod monitoring_uuid_cache;
+pub(crate) mod static_hash_cache;
 mod rpc_timing;
 mod subcommands;
 mod token;

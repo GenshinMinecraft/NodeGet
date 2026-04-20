@@ -1,18 +1,27 @@
 use crate::DB;
 use crate::entity::token;
+use crate::token::get::parse_token_limit_with_compat;
 use nodeget_lib::error::NodegetError;
+use nodeget_lib::permission::data_structure::Limit;
 use sea_orm::EntityTrait;
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 use tokio::sync::RwLock;
 
+/// Pre-parsed token entry: model + parsed token_limit.
+/// Avoids re-parsing serde_json::Value on every auth call.
+pub struct CachedToken {
+    pub model: Arc<token::Model>,
+    pub parsed_limits: Vec<Limit>,
+}
+
 struct TokenCacheInner {
-    /// token_key -> Model (Arc-wrapped to avoid deep clones on every lookup)
-    by_key: HashMap<String, Arc<token::Model>>,
-    /// username -> Model (only tokens that have a username)
-    by_username: HashMap<String, Arc<token::Model>>,
+    /// token_key -> cached entry
+    by_key: HashMap<String, Arc<CachedToken>>,
+    /// username -> cached entry (only tokens that have a username)
+    by_username: HashMap<String, Arc<CachedToken>>,
     /// super token (id=1), cached separately for fast access
-    super_token: Option<Arc<token::Model>>,
+    super_token: Option<Arc<CachedToken>>,
 }
 
 pub struct TokenCache {
@@ -34,20 +43,7 @@ impl TokenCache {
             .await
             .map_err(|e| NodegetError::DatabaseError(format!("Failed to load tokens: {e}")))?;
 
-        let mut by_key = HashMap::with_capacity(all_tokens.len());
-        let mut by_username = HashMap::new();
-        let mut super_token = None;
-
-        for model in all_tokens {
-            let arc = Arc::new(model);
-            if arc.id == 1 {
-                super_token = Some(Arc::clone(&arc));
-            }
-            by_key.insert(arc.token_key.clone(), Arc::clone(&arc));
-            if let Some(ref uname) = arc.username {
-                by_username.insert(uname.clone(), arc);
-            }
-        }
+        let (by_key, by_username, super_token) = Self::build_cache(all_tokens);
 
         let cache = TokenCache {
             inner: RwLock::new(TokenCacheInner {
@@ -97,20 +93,7 @@ impl TokenCache {
             .await
             .map_err(|e| NodegetError::DatabaseError(format!("Failed to reload tokens: {e}")))?;
 
-        let mut by_key = HashMap::with_capacity(all_tokens.len());
-        let mut by_username = HashMap::new();
-        let mut super_token = None;
-
-        for model in all_tokens {
-            let arc = Arc::new(model);
-            if arc.id == 1 {
-                super_token = Some(Arc::clone(&arc));
-            }
-            by_key.insert(arc.token_key.clone(), Arc::clone(&arc));
-            if let Some(ref uname) = arc.username {
-                by_username.insert(uname.clone(), arc);
-            }
-        }
+        let (by_key, by_username, super_token) = Self::build_cache(all_tokens);
 
         let mut guard = cache.inner.write().await;
         guard.by_key = by_key;
@@ -121,27 +104,68 @@ impl TokenCache {
         Ok(())
     }
 
-    /// Find a token model by token_key.
-    pub async fn find_by_key(&self, key: &str) -> Option<Arc<token::Model>> {
+    /// Find a cached token by token_key.
+    pub async fn find_by_key(&self, key: &str) -> Option<Arc<CachedToken>> {
         let guard = self.inner.read().await;
         guard.by_key.get(key).map(Arc::clone)
     }
 
-    /// Find a token model by username.
-    pub async fn find_by_username(&self, username: &str) -> Option<Arc<token::Model>> {
+    /// Find a cached token by username.
+    pub async fn find_by_username(&self, username: &str) -> Option<Arc<CachedToken>> {
         let guard = self.inner.read().await;
         guard.by_username.get(username).map(Arc::clone)
     }
 
-    /// Get the super token model (id=1).
-    pub async fn get_super_token(&self) -> Option<Arc<token::Model>> {
+    /// Get the super token (id=1).
+    pub async fn get_super_token(&self) -> Option<Arc<CachedToken>> {
         let guard = self.inner.read().await;
         guard.super_token.as_ref().map(Arc::clone)
     }
 
-    /// Get all token models (for list_all_tokens).
-    pub async fn get_all(&self) -> Vec<Arc<token::Model>> {
+    /// Get all cached tokens (for list_all_tokens).
+    pub async fn get_all(&self) -> Vec<Arc<CachedToken>> {
         let guard = self.inner.read().await;
         guard.by_key.values().map(Arc::clone).collect()
+    }
+
+    /// Build cache maps from a list of models.
+    fn build_cache(
+        all_tokens: Vec<token::Model>,
+    ) -> (
+        HashMap<String, Arc<CachedToken>>,
+        HashMap<String, Arc<CachedToken>>,
+        Option<Arc<CachedToken>>,
+    ) {
+        let mut by_key = HashMap::with_capacity(all_tokens.len());
+        let mut by_username = HashMap::new();
+        let mut super_token = None;
+
+        for model in all_tokens {
+            let parsed_limits =
+                parse_token_limit_with_compat(model.token_limit.clone()).unwrap_or_else(|e| {
+                    tracing::warn!(
+                        target: "token",
+                        token_key = %model.token_key,
+                        error = %e,
+                        "failed to pre-parse token_limit, using empty"
+                    );
+                    Vec::new()
+                });
+
+            let cached = Arc::new(CachedToken {
+                model: Arc::new(model),
+                parsed_limits,
+            });
+
+            if cached.model.id == 1 {
+                super_token = Some(Arc::clone(&cached));
+            }
+            by_key.insert(cached.model.token_key.clone(), Arc::clone(&cached));
+            if let Some(ref uname) = cached.model.username {
+                by_username.insert(uname.clone(), cached);
+            }
+        }
+
+        (by_key, by_username, super_token)
     }
 }
