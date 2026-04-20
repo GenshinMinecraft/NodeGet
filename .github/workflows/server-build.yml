@@ -40,12 +40,6 @@ jobs:
           - release_for: linux_aarch64_musl
             target: aarch64-unknown-linux-musl
             binary_name: nodeget-server-linux-aarch64-musl
-          - release_for: linux_arm_musleabi
-            target: arm-unknown-linux-musleabi
-            binary_name: nodeget-server-linux-arm-musleabi
-          - release_for: linux_arm_musleabihf
-            target: arm-unknown-linux-musleabihf
-            binary_name: nodeget-server-linux-arm-musleabihf
           - release_for: linux_armv7_gnueabi
             target: armv7-unknown-linux-gnueabi
             binary_name: nodeget-server-linux-armv7-gnueabi
