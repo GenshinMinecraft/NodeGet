@@ -20,44 +20,58 @@ jobs:
   agent-release:
     name: Build - ${{ matrix.platform.release_for }}
     strategy:
+      fail-fast: false
       matrix:
         platform:
+          # x86_64
           - release_for: linux_x86_64_musl
             target: x86_64-unknown-linux-musl
             binary_name: nodeget-agent-linux-x86_64-musl
           - release_for: linux_x86_64_gnu
             target: x86_64-unknown-linux-gnu
             binary_name: nodeget-agent-linux-x86_64-gnu
-          - release_for: linux_arm_gnueabi
-            target: arm-unknown-linux-gnueabi
-            binary_name: nodeget-agent-linux-arm-gnueabi
-          - release_for: linux_arm_gnueabihf
-            target: arm-unknown-linux-gnueabihf
-            binary_name: nodeget-agent-linux-arm-gnueabihf
-          - release_for: linux_aarch64_gnu
-            target: aarch64-unknown-linux-gnu
-            binary_name: nodeget-agent-linux-aarch64-gnu
-          - release_for: linux_aarch64_musl
-            target: aarch64-unknown-linux-musl
-            binary_name: nodeget-agent-linux-aarch64-musl
+          # i686
           - release_for: linux_i686_gnu
             target: i686-unknown-linux-gnu
             binary_name: nodeget-agent-linux-i686-gnu
           - release_for: linux_i686_musl
             target: i686-unknown-linux-musl
             binary_name: nodeget-agent-linux-i686-musl
+          # i586
+          - release_for: linux_i586_gnu
+            target: i586-unknown-linux-gnu
+            binary_name: nodeget-agent-linux-i586-gnu
+          - release_for: linux_i586_musl
+            target: i586-unknown-linux-musl
+            binary_name: nodeget-agent-linux-i586-musl
+          # aarch64
+          - release_for: linux_aarch64_gnu
+            target: aarch64-unknown-linux-gnu
+            binary_name: nodeget-agent-linux-aarch64-gnu
+          - release_for: linux_aarch64_musl
+            target: aarch64-unknown-linux-musl
+            binary_name: nodeget-agent-linux-aarch64-musl
+          # arm (generic)
+          - release_for: linux_arm_gnueabi
+            target: arm-unknown-linux-gnueabi
+            binary_name: nodeget-agent-linux-arm-gnueabi
+          - release_for: linux_arm_gnueabihf
+            target: arm-unknown-linux-gnueabihf
+            binary_name: nodeget-agent-linux-arm-gnueabihf
           - release_for: linux_arm_musleabi
             target: arm-unknown-linux-musleabi
             binary_name: nodeget-agent-linux-arm-musleabi
           - release_for: linux_arm_musleabihf
             target: arm-unknown-linux-musleabihf
             binary_name: nodeget-agent-linux-arm-musleabihf
+          # armv5te
           - release_for: linux_armv5te_gnu
             target: armv5te-unknown-linux-gnueabi
             binary_name: nodeget-agent-linux-armv5te-gnueabi
           - release_for: linux_armv5te_musl
             target: armv5te-unknown-linux-musleabi
             binary_name: nodeget-agent-linux-armv5te-musleabi
+          # armv7
           - release_for: linux_armv7_gnueabi
             target: armv7-unknown-linux-gnueabi
             binary_name: nodeget-agent-linux-armv7-gnueabi
@@ -70,6 +84,68 @@ jobs:
           - release_for: linux_armv7_musleabihf
             target: armv7-unknown-linux-musleabihf
             binary_name: nodeget-agent-linux-armv7-musleabihf
+          # thumbv7neon (ARMv7 with NEON SIMD)
+          - release_for: linux_thumbv7neon_gnueabihf
+            target: thumbv7neon-unknown-linux-gnueabihf
+            binary_name: nodeget-agent-linux-thumbv7neon-gnueabihf
+          # riscv64
+          - release_for: linux_riscv64gc_gnu
+            target: riscv64gc-unknown-linux-gnu
+            binary_name: nodeget-agent-linux-riscv64gc-gnu
+            no_upx: true
+          # loongarch64 (龙芯)
+          - release_for: linux_loongarch64_gnu
+            target: loongarch64-unknown-linux-gnu
+            binary_name: nodeget-agent-linux-loongarch64-gnu
+            no_upx: true
+          # powerpc
+          - release_for: linux_powerpc_gnu
+            target: powerpc-unknown-linux-gnu
+            binary_name: nodeget-agent-linux-powerpc-gnu
+            no_upx: true
+          - release_for: linux_powerpc64_gnu
+            target: powerpc64-unknown-linux-gnu
+            binary_name: nodeget-agent-linux-powerpc64-gnu
+            no_upx: true
+          - release_for: linux_powerpc64le_gnu
+            target: powerpc64le-unknown-linux-gnu
+            binary_name: nodeget-agent-linux-powerpc64le-gnu
+            no_upx: true
+          # s390x (IBM Z)
+          - release_for: linux_s390x_gnu
+            target: s390x-unknown-linux-gnu
+            binary_name: nodeget-agent-linux-s390x-gnu
+            no_upx: true
+          # mips
+          - release_for: linux_mips_gnu
+            target: mips-unknown-linux-gnu
+            binary_name: nodeget-agent-linux-mips-gnu
+            no_upx: true
+          - release_for: linux_mips_musl
+            target: mips-unknown-linux-musl
+            binary_name: nodeget-agent-linux-mips-musl
+            no_upx: true
+          - release_for: linux_mipsel_gnu
+            target: mipsel-unknown-linux-gnu
+            binary_name: nodeget-agent-linux-mipsel-gnu
+            no_upx: true
+          - release_for: linux_mipsel_musl
+            target: mipsel-unknown-linux-musl
+            binary_name: nodeget-agent-linux-mipsel-musl
+            no_upx: true
+          - release_for: linux_mips64_gnuabi64
+            target: mips64-unknown-linux-gnuabi64
+            binary_name: nodeget-agent-linux-mips64-gnuabi64
+            no_upx: true
+          - release_for: linux_mips64el_gnuabi64
+            target: mips64el-unknown-linux-gnuabi64
+            binary_name: nodeget-agent-linux-mips64el-gnuabi64
+            no_upx: true
+          # sparc64
+          - release_for: linux_sparc64_gnu
+            target: sparc64-unknown-linux-gnu
+            binary_name: nodeget-agent-linux-sparc64-gnu
+            no_upx: true
 
     runs-on: ubuntu-latest
     steps:
@@ -92,6 +168,7 @@ jobs:
           CROSS_NO_WARNINGS: 0
 
       - name: Compress binary
+        if: ${{ !matrix.platform.no_upx }}
         run: upx --brute ./target/${{ matrix.platform.target }}/minimal/nodeget-agent
 
       - name: Rename binary
