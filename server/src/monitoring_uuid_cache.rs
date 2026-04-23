@@ -9,8 +9,8 @@ use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 struct MonitoringUuidCacheInner {
-    by_uuid: HashMap<Uuid, i32>,
-    by_id: HashMap<i32, Uuid>,
+    by_uuid: HashMap<Uuid, i16>,
+    by_id: HashMap<i16, Uuid>,
 }
 
 pub struct MonitoringUuidCache {
@@ -34,8 +34,8 @@ impl MonitoringUuidCache {
         let mut by_id = HashMap::with_capacity(all.len());
 
         for model in &all {
-            by_uuid.insert(model.uuid, model.id);
-            by_id.insert(model.id, model.uuid);
+            by_uuid.insert(model.uuid, model.id as i16);
+            by_id.insert(model.id as i16, model.uuid);
         }
 
         let count = all.len();
@@ -77,8 +77,8 @@ impl MonitoringUuidCache {
         let mut by_id = HashMap::with_capacity(all.len());
 
         for model in &all {
-            by_uuid.insert(model.uuid, model.id);
-            by_id.insert(model.id, model.uuid);
+            by_uuid.insert(model.uuid, model.id as i16);
+            by_id.insert(model.id as i16, model.uuid);
         }
 
         let mut guard = cache.inner.write().await;
@@ -89,22 +89,22 @@ impl MonitoringUuidCache {
         Ok(())
     }
 
-    /// Get the i32 id for a UUID. Returns None if not in cache.
-    pub async fn get_id(&self, uuid: &Uuid) -> Option<i32> {
+    /// Get the i16 id for a UUID. Returns None if not in cache.
+    pub async fn get_id(&self, uuid: &Uuid) -> Option<i16> {
         let guard = self.inner.read().await;
         guard.by_uuid.get(uuid).copied()
     }
 
-    /// Get the UUID for an i32 id. Returns None if not in cache.
-    pub async fn get_uuid(&self, id: i32) -> Option<Uuid> {
+    /// Get the UUID for an i16 id. Returns None if not in cache.
+    pub async fn get_uuid(&self, id: i16) -> Option<Uuid> {
         let guard = self.inner.read().await;
         guard.by_id.get(&id).copied()
     }
 
-    /// Get or insert a UUID, returning its i32 id.
+    /// Get or insert a UUID, returning its i16 id.
     /// If the UUID is already cached, returns immediately.
     /// Otherwise inserts into DB, updates cache, and returns the new id.
-    pub async fn get_or_insert(&self, uuid: Uuid) -> anyhow::Result<i32> {
+    pub async fn get_or_insert(&self, uuid: Uuid) -> anyhow::Result<i16> {
         // Fast path: read lock
         {
             let guard = self.inner.read().await;
@@ -128,7 +128,7 @@ impl MonitoringUuidCache {
             })?;
 
         let id = if let Some(model) = existing {
-            model.id
+            model.id as i16
         } else {
             let new_model = monitoring_uuid::ActiveModel {
                 id: ActiveValue::default(),
@@ -137,7 +137,7 @@ impl MonitoringUuidCache {
             match monitoring_uuid::Entity::insert(new_model).exec(db).await {
                 Ok(result) => {
                     debug!(target: "monitoring", %uuid, id = result.last_insert_id, "New monitoring UUID registered");
-                    result.last_insert_id
+                    result.last_insert_id as i16
                 }
                 Err(_) => {
                     // UNIQUE constraint violation — another thread inserted concurrently
@@ -157,7 +157,7 @@ impl MonitoringUuidCache {
                             )
                         })?;
                     debug!(target: "monitoring", %uuid, id = model.id, "Monitoring UUID resolved after concurrent insert");
-                    model.id
+                    model.id as i16
                 }
             }
         };

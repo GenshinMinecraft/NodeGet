@@ -77,7 +77,7 @@ pub async fn static_data_multi_last_query(
         let uuid_cache = MonitoringUuidCache::global();
 
         // Resolve UUIDs to uuid_ids
-        let mut uuid_id_pairs: Vec<(Uuid, i32)> = Vec::with_capacity(deduped_uuids.len());
+        let mut uuid_id_pairs: Vec<(Uuid, i16)> = Vec::with_capacity(deduped_uuids.len());
         for uuid in &deduped_uuids {
             let uuid_id = uuid_cache.get_id(uuid).await.ok_or_else(|| {
                 NodegetError::NotFound(format!(
@@ -138,7 +138,7 @@ fn dedupe_uuids(uuids: Vec<Uuid>) -> Vec<Uuid> {
 }
 
 fn build_union_last_statement(
-    uuid_id_pairs: &[(Uuid, i32)],
+    uuid_id_pairs: &[(Uuid, i16)],
     fields: &[StaticDataQueryField],
     db: &DatabaseConnection,
 ) -> anyhow::Result<Statement> {
@@ -158,7 +158,7 @@ fn build_union_last_statement(
     ))
 }
 
-fn build_single_last_select(uuid_id: i32, fields: &[StaticDataQueryField]) -> SelectStatement {
+fn build_single_last_select(uuid_id: i16, fields: &[StaticDataQueryField]) -> SelectStatement {
     let inner_query = static_monitoring::Entity::find()
         .select_only()
         .column(static_monitoring::Column::UuidId)
@@ -230,7 +230,7 @@ async fn execute_statement_query(
                     // Translate uuid_id → uuid string
                     if let Some(uuid_id_val) = obj.remove("uuid_id") {
                         if let Some(uuid_id) = uuid_id_val.as_i64() {
-                            if let Some(uuid) = uuid_cache.get_uuid(uuid_id as i32).await {
+                            if let Some(uuid) = uuid_cache.get_uuid(uuid_id as i16).await {
                                 obj.insert(
                                     "uuid".to_owned(),
                                     serde_json::Value::String(uuid.to_string()),

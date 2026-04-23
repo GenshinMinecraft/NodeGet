@@ -7,7 +7,7 @@ use tokio::sync::RwLock;
 
 struct Inner {
     /// uuid_id -> last known data_hash
-    by_uuid_id: HashMap<i32, Vec<u8>>,
+    by_uuid_id: HashMap<i16, Vec<u8>>,
 }
 
 pub struct StaticHashCache {
@@ -35,7 +35,7 @@ impl StaticHashCache {
 
     /// Check if the given hash matches the cached hash for this uuid_id.
     /// Returns `true` if it's a known duplicate (same hash as last time).
-    pub async fn is_duplicate(&self, uuid_id: i32, data_hash: &[u8]) -> bool {
+    pub async fn is_duplicate(&self, uuid_id: i16, data_hash: &[u8]) -> bool {
         let guard = self.inner.read().await;
         guard
             .by_uuid_id
@@ -44,7 +44,7 @@ impl StaticHashCache {
     }
 
     /// Update the cached hash for a uuid_id after successful buffer/insert.
-    pub async fn update(&self, uuid_id: i32, data_hash: Vec<u8>) {
+    pub async fn update(&self, uuid_id: i16, data_hash: Vec<u8>) {
         let mut guard = self.inner.write().await;
         guard.by_uuid_id.insert(uuid_id, data_hash);
     }

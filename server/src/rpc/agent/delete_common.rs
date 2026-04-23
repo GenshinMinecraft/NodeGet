@@ -43,7 +43,7 @@ pub fn extract_limit_and_last(conditions: &[QueryCondition]) -> (Option<u64>, bo
 }
 
 pub enum ResolvedCondition {
-    UuidId(i32),
+    UuidId(i16),
     TimestampFromTo(i64, i64),
     TimestampFrom(i64),
     TimestampTo(i64),

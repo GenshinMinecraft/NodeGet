@@ -135,7 +135,7 @@ fn ensure_postgres_backend(db: &DatabaseConnection) -> anyhow::Result<()> {
 async fn query_summary_avg_postgres(
     db: &DatabaseConnection,
     query: &DynamicSummaryAvgQuery,
-    uuid_id: i32,
+    uuid_id: i16,
 ) -> anyhow::Result<Box<RawValue>> {
     let sql = build_postgres_summary_avg_sql(&query.fields);
     tracing::trace!(target: "monitoring", fields_count = query.fields.len(), "Dynamic summary avg SQL generated");
@@ -149,7 +149,7 @@ async fn query_summary_avg_postgres(
             i64::try_from(query.points)
                 .map_err(|_| NodegetError::InvalidInput("points is too large".to_owned()))?
                 .into(),
-            (uuid_id as i32).into(),
+            uuid_id.into(),
         ],
     );
 

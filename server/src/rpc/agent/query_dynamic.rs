@@ -108,7 +108,7 @@ pub async fn query_dynamic(
         let mut is_last = false;
 
         // Pre-resolve UUID conditions to uuid_id via cache
-        let mut uuid_ids: Vec<i32> = Vec::new();
+        let mut uuid_ids: Vec<i16> = Vec::new();
         for cond in &dynamic_data_query.condition {
             if let QueryCondition::Uuid(uuid) = cond {
                 let uuid_id = uuid_cache.get_id(uuid).await.ok_or_else(|| {
@@ -223,10 +223,10 @@ async fn execute_query(
             Ok(mut v) => {
                 result_count += 1;
                 if let Some(obj) = v.as_object_mut() {
-                    // Translate uuid_id (i32) → uuid (string) for API compatibility
+                    // Translate uuid_id (i16) → uuid (string) for API compatibility
                     if let Some(Value::Number(n)) = obj.remove("uuid_id") {
                         if let Some(id) = n.as_i64() {
-                            if let Some(uuid) = uuid_cache.get_uuid(id as i32).await {
+                            if let Some(uuid) = uuid_cache.get_uuid(id as i16).await {
                                 obj.insert("uuid".to_string(), Value::String(uuid.to_string()));
                             }
                         }
