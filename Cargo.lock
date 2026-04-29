@@ -2575,6 +2575,8 @@ dependencies = [
  "serde",
  "serde_json",
  "simple_logger",
+ "sntpc",
+ "sntpc-net-tokio",
  "surge-ping",
  "sysinfo",
  "tokio",
@@ -4190,6 +4192,25 @@ dependencies = [
  "socket2 0.3.19",
  "wepoll-sys-stjepang",
  "winapi",
+]
+
+[[package]]
+name = "sntpc"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e855b111d32f2d01ac4f6bf754ec65770f1680963c1f3a6b58b069a11086613"
+dependencies = [
+ "cfg-if 1.0.4",
+]
+
+[[package]]
+name = "sntpc-net-tokio"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "24a8e1bd32855d92cc046615e218a9d81859452bf24cb140f2f6c914c6fcfab9"
+dependencies = [
+ "sntpc",
+ "tokio",
 ]
 
 [[package]]

@@ -33,6 +33,9 @@ pub struct AgentConfig {
     // IP 地址获取服务提供商
     pub ip_provider: Option<IpProvider>,
 
+    // NTP 服务器地址，默认使用阿里云 NTP
+    pub ntp_server: Option<String>,
+
     // 服务器列表
     pub server: Option<Vec<Server>>,
 }
