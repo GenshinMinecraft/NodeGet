@@ -36,7 +36,9 @@ pub fn get_memory_logs() -> Vec<serde_json::Value> {
     MEMORY_LOG_BUFFER
         .get()
         .map(|buf| {
-            let guard = buf.lock().unwrap_or_else(|e| e.into_inner());
+            let guard = buf
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             guard.iter().cloned().collect()
         })
         .unwrap_or_default()
@@ -205,7 +207,10 @@ where
 
         // Use unwrap_or_else(into_inner) to recover from Mutex poisoning
         // instead of silently dropping the log entry.
-        let mut guard = self.buffer.lock().unwrap_or_else(|e| e.into_inner());
+        let mut guard = self
+            .buffer
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let cap = MEMORY_LOG_CAPACITY
             .get()
             .copied()
@@ -554,7 +559,10 @@ impl StreamLogManager {
         let expanded = expand_virtual_targets(filter_str);
         let filter = StreamFilter::parse(&expanded);
         let subscriber = StreamLogSubscriber { tx, filter };
-        let mut guard = self.subscribers.write().unwrap_or_else(|e| e.into_inner());
+        let mut guard = self
+            .subscribers
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         guard.insert(id, subscriber);
         self.subscriber_count.store(guard.len(), Ordering::Release);
     }
@@ -563,7 +571,10 @@ impl StreamLogManager {
     ///
     /// **WARNING**: Same deadlock caveat as [`add_subscriber`].
     pub fn remove_subscriber(&self, id: &Uuid) {
-        let mut guard = self.subscribers.write().unwrap_or_else(|e| e.into_inner());
+        let mut guard = self
+            .subscribers
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         guard.remove(id);
         self.subscriber_count.store(guard.len(), Ordering::Release);
     }
@@ -722,7 +733,7 @@ where
             .manager
             .subscribers
             .read()
-            .unwrap_or_else(|e| e.into_inner());
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
 
         if guard.is_empty() {
             return;

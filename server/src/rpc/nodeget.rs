@@ -567,17 +567,18 @@ mod list_all_agent_uuid {
         let db_backend = db.get_database_backend();
 
         // Use UNION to collect all uuid_ids from monitoring tables in a single query
-        let sql = r#"
+        let sql = r"
             SELECT uuid_id FROM static_monitoring
             UNION
             SELECT uuid_id FROM dynamic_monitoring
             UNION
             SELECT uuid_id FROM dynamic_monitoring_summary
-        "#;
-        let rows = UuidIdRow::find_by_statement(Statement::from_string(db_backend, sql.to_string()))
-            .all(db)
-            .await
-            .map_err(|e| NodegetError::DatabaseError(e.to_string()))?;
+        ";
+        let rows =
+            UuidIdRow::find_by_statement(Statement::from_string(db_backend, sql.to_string()))
+                .all(db)
+                .await
+                .map_err(|e| NodegetError::DatabaseError(e.to_string()))?;
 
         let mut uuid_id_set = std::collections::BTreeSet::<i16>::new();
         for row in rows {

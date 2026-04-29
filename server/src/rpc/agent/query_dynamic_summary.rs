@@ -111,10 +111,7 @@ pub async fn query_dynamic_summary(
                 .column(dynamic_monitoring_summary::Column::TransmitSpeed)
                 .column(dynamic_monitoring_summary::Column::ReceiveSpeed)
         } else {
-            query_data
-                .fields
-                .iter()
-                .fold(query, |q, field| select_field(q, field))
+            query_data.fields.iter().fold(query, select_field)
         };
 
         let mut limit_count = None;
@@ -217,7 +214,7 @@ where
     }
 }
 
-pub(crate) fn field_to_column(
+pub const fn field_to_column(
     field: &DynamicSummaryQueryField,
 ) -> dynamic_monitoring_summary::Column {
     match field {
@@ -286,14 +283,12 @@ async fn execute_query(
                 result_count += 1;
 
                 // Translate uuid_id (i16) → uuid (string) for API compatibility
-                if let Value::Object(ref mut map) = v {
-                    if let Some(Value::Number(n)) = map.remove("uuid_id") {
-                        if let Some(id) = n.as_i64() {
-                            if let Some(uuid) = uuid_cache.get_uuid(id as i16).await {
-                                map.insert("uuid".to_string(), Value::String(uuid.to_string()));
-                            }
-                        }
-                    }
+                if let Value::Object(ref mut map) = v
+                    && let Some(Value::Number(n)) = map.remove("uuid_id")
+                    && let Some(id) = n.as_i64()
+                    && let Some(uuid) = uuid_cache.get_uuid(id as i16).await
+                {
+                    map.insert("uuid".to_string(), Value::String(uuid.to_string()));
                 }
 
                 if first {

@@ -68,7 +68,7 @@ impl fmt::Display for TruncatedRaw<'_> {
 ///
 /// Uses `target: "rpc"` intentionally — this is cross-cutting RPC
 /// infrastructure logging, distinct from domain-specific targets
-/// (kv, token, js_worker, etc.).
+/// (kv, token, `js_worker`, etc.).
 macro_rules! rpc_exec {
     ($expr:expr) => {{
         match $expr {

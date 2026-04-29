@@ -12,8 +12,8 @@ use nodeget_lib::permission::token_auth::TokenOrAuth;
 use nodeget_lib::utils::error_message::anyhow_error_to_raw;
 use sea_orm::sea_query::{Alias, Expr, Query, SelectStatement, UnionType};
 use sea_orm::{
-    ColumnTrait, DatabaseBackend, DatabaseConnection, EntityTrait, ExprTrait, FromQueryResult, Order, QueryFilter,
-    QueryOrder, QuerySelect, QueryTrait, Statement, StatementBuilder,
+    ColumnTrait, DatabaseBackend, DatabaseConnection, EntityTrait, ExprTrait, FromQueryResult,
+    Order, QueryFilter, QueryOrder, QuerySelect, QueryTrait, Statement, StatementBuilder,
 };
 use serde_json::value::RawValue;
 use std::collections::HashSet;
@@ -105,7 +105,7 @@ pub async fn dynamic_summary_multi_last_query(
 
         let statement = build_union_last_statement(&uuid_id_pairs, &fields, db)?;
 
-        execute_statement_query(db, statement, deduped_uuids.len(), &uuid_cache).await
+        execute_statement_query(db, statement, deduped_uuids.len(), uuid_cache).await
     };
 
     match process_logic.await {
@@ -154,13 +154,13 @@ fn build_union_last_statement(
 
     let mut union_query = build_single_last_select(first_pair.1, fields, backend);
     for pair in pair_iter {
-        union_query.union(UnionType::All, build_single_last_select(pair.1, fields, backend));
+        union_query.union(
+            UnionType::All,
+            build_single_last_select(pair.1, fields, backend),
+        );
     }
 
-    Ok(StatementBuilder::build(
-        &union_query,
-        &backend,
-    ))
+    Ok(StatementBuilder::build(&union_query, &backend))
 }
 
 /// Column names that are stored as *10 scaled integers and need /10.0 on read
@@ -228,7 +228,10 @@ fn build_single_last_select(
     let col_names: Vec<&str> = if fields.is_empty() {
         ALL_SUMMARY_COLUMNS.to_vec()
     } else {
-        fields.iter().map(|f| f.column_name()).collect()
+        fields
+            .iter()
+            .map(nodeget_lib::monitoring::query::DynamicSummaryQueryField::column_name)
+            .collect()
     };
 
     if backend == DatabaseBackend::Postgres {
@@ -285,15 +288,14 @@ async fn execute_statement_query(
                 result_count += 1;
                 // Translate uuid_id → uuid string
                 if let Some(obj) = value.as_object_mut() {
-                    if let Some(uuid_id_val) = obj.remove("uuid_id") {
-                        if let Some(uuid_id) = uuid_id_val.as_i64() {
-                            if let Some(uuid) = uuid_cache.get_uuid(uuid_id as i16).await {
-                                obj.insert(
-                                    "uuid".to_owned(),
-                                    serde_json::Value::String(uuid.to_string()),
-                                );
-                            }
-                        }
+                    if let Some(uuid_id_val) = obj.remove("uuid_id")
+                        && let Some(uuid_id) = uuid_id_val.as_i64()
+                        && let Some(uuid) = uuid_cache.get_uuid(uuid_id as i16).await
+                    {
+                        obj.insert(
+                            "uuid".to_owned(),
+                            serde_json::Value::String(uuid.to_string()),
+                        );
                     }
                     if needs_app_descaling {
                         apply_descaling(obj);
@@ -339,42 +341,34 @@ async fn execute_statement_query(
 
 /// Apply /10.0 descaling to known scaled columns in the JSON object.
 /// This is done in application code rather than SQL to work around
-/// SQLite limitations with expression aliases in raw `find_by_statement` queries.
+/// `SQLite` limitations with expression aliases in raw `find_by_statement` queries.
 fn apply_descaling(obj: &mut serde_json::Map<String, serde_json::Value>) {
     const SCALED_FIELDS: &[&str] = &["cpu_usage", "load_one", "load_five", "load_fifteen"];
     for key in SCALED_FIELDS {
-        if let Some(val) = obj.get_mut(*key) {
-            match val {
-                serde_json::Value::Number(n) => {
-                    if let Some(i) = n.as_i64() {
-                        if let Some(scaled) = serde_json::Number::from_f64(i as f64 / 10.0) {
-                            *val = serde_json::Value::Number(scaled);
-                        }
-                    } else if let Some(f) = n.as_f64() {
-                        if let Some(scaled) = serde_json::Number::from_f64(f / 10.0) {
-                            *val = serde_json::Value::Number(scaled);
-                        }
+        if let Some(val) = obj.get_mut(*key)
+            && let serde_json::Value::Number(n) = val {
+                if let Some(i) = n.as_i64() {
+                    if let Some(scaled) = serde_json::Number::from_f64(i as f64 / 10.0) {
+                        *val = serde_json::Value::Number(scaled);
                     }
+                } else if let Some(f) = n.as_f64()
+                    && let Some(scaled) = serde_json::Number::from_f64(f / 10.0)
+                {
+                    *val = serde_json::Value::Number(scaled);
                 }
-                _ => {}
             }
-        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sea_orm::{
-        ConnectionTrait, Database, DatabaseBackend, Schema, StatementBuilder,
-    };
+    use sea_orm::{ConnectionTrait, Database, DatabaseBackend, Schema, StatementBuilder};
     use serde_json::Value;
 
     #[tokio::test]
     async fn test_multi_last_sqlite_scaled_fields_present() {
-        let db = Database::connect("sqlite::memory:")
-            .await
-            .expect("connect");
+        let db = Database::connect("sqlite::memory:").await.expect("connect");
 
         let schema = Schema::new(DatabaseBackend::Sqlite);
         let stmt = schema
@@ -479,10 +473,22 @@ mod tests {
 
         // Apply descaling and verify
         apply_descaling(&mut obj);
-        assert_eq!(obj["cpu_usage"], Value::Number(serde_json::Number::from_f64(5.0).unwrap()));
-        assert_eq!(obj["load_one"], Value::Number(serde_json::Number::from_f64(0.5).unwrap()));
-        assert_eq!(obj["load_five"], Value::Number(serde_json::Number::from_f64(0.3).unwrap()));
-        assert_eq!(obj["load_fifteen"], Value::Number(serde_json::Number::from_f64(0.1).unwrap()));
+        assert_eq!(
+            obj["cpu_usage"],
+            Value::Number(serde_json::Number::from_f64(5.0).unwrap())
+        );
+        assert_eq!(
+            obj["load_one"],
+            Value::Number(serde_json::Number::from_f64(0.5).unwrap())
+        );
+        assert_eq!(
+            obj["load_five"],
+            Value::Number(serde_json::Number::from_f64(0.3).unwrap())
+        );
+        assert_eq!(
+            obj["load_fifteen"],
+            Value::Number(serde_json::Number::from_f64(0.1).unwrap())
+        );
 
         // Verify other fields are unaffected
         assert_eq!(obj["used_memory"], Value::Number(650596352i64.into()));

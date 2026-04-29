@@ -269,7 +269,12 @@ async fn run_cleanup_database_job(cron_id: i64, cron_name: String) {
     }
 }
 
-async fn run_js_worker_job(cron_id: i64, cron_name: String, js_script_name: String, params: serde_json::Value) {
+async fn run_js_worker_job(
+    cron_id: i64,
+    cron_name: String,
+    js_script_name: String,
+    params: serde_json::Value,
+) {
     info!(target: "crontab", cron_id = cron_id, cron_name = %cron_name, js_script_name = %js_script_name, "running js worker cron job");
     let Some(db) = DB.get() else {
         error!(

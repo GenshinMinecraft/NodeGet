@@ -319,7 +319,7 @@ impl TaskManager {
         }
     }
 
-    /// 注册一个 blocking waiter，等待指定 task_id 的结果
+    /// 注册一个 blocking waiter，等待指定 `task_id` 的结果
     pub async fn register_blocking_waiter(
         &self,
         task_id: u64,
@@ -335,7 +335,7 @@ impl TaskManager {
         self.blocking_waiters.write().await.remove(&task_id);
     }
 
-    /// 尝试通知 blocking waiter（upload_task_result 时调用）
+    /// 尝试通知 blocking `waiter（upload_task_result` 时调用）
     /// 返回 true 表示有 waiter 被通知
     pub async fn notify_blocking_waiter(&self, task_id: u64, response: TaskEventResponse) -> bool {
         if let Some(tx) = self.blocking_waiters.write().await.remove(&task_id) {

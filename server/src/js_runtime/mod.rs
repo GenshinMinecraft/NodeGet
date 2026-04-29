@@ -165,13 +165,14 @@ pub fn compile_js_module_to_bytecode(js_code: impl AsRef<str>) -> Result<Vec<u8>
         rt.set_memory_limit(JS_RT_MEMORY_LIMIT_BYTES).await;
         let ctx = AsyncContext::full(&rt).await?;
 
-        let compile_result: Result<Vec<u8>, Error> = ctx.async_with(async |ctx| {
-            // Keep compile context aligned with runtime context.
-            init_js_runtime_globals(&ctx)?;
+        let compile_result: Result<Vec<u8>, Error> = ctx
+            .async_with(async |ctx| {
+                // Keep compile context aligned with runtime context.
+                init_js_runtime_globals(&ctx)?;
 
-            compile_module_bytecode_no_eval(&ctx, &js_code)
-        })
-        .await;
+                compile_module_bytecode_no_eval(&ctx, &js_code)
+            })
+            .await;
 
         rt.idle().await;
         compile_result
