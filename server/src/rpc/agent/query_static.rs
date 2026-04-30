@@ -138,11 +138,14 @@ pub async fn query_static(
                 }
             });
 
+        const MAX_LIMIT: u64 = 10_000;
+        let clamped_limit = limit_count.map(|l| std::cmp::min(l, MAX_LIMIT));
+
         let query = if is_last {
             query
                 .order_by(static_monitoring::Column::Timestamp, Order::Desc)
                 .limit(1)
-        } else if let Some(l) = limit_count {
+        } else if let Some(l) = clamped_limit {
             query
                 .order_by(static_monitoring::Column::Timestamp, Order::Desc)
                 .limit(l)
@@ -160,7 +163,7 @@ pub async fn query_static(
             db,
             query.into_json(),
             &field_mappings,
-            limit_count.unwrap_or(100),
+            clamped_limit.unwrap_or(100),
             uuid_cache,
         )
         .await
@@ -199,7 +202,7 @@ async fn execute_query(
         NodegetError::DatabaseError(format!("Database query error: {e}"))
     })?;
 
-    let capacity = capacity_hint as usize * 200;
+    let capacity = (capacity_hint as usize).saturating_mul(200);
     let mut output_buffer: Vec<u8> = Vec::with_capacity(capacity);
 
     output_buffer.push(b'[');

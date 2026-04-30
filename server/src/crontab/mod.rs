@@ -12,6 +12,7 @@ use nodeget_lib::crontab::{AgentCronType, Cron, CronType, ServerCronType};
 use nodeget_lib::js_runtime::RunType;
 use sea_orm::{ActiveModelTrait, ActiveValue, ColumnTrait, EntityTrait, QueryFilter, Set};
 use std::time::Duration;
+use tokio::task::JoinSet;
 use tokio::time::sleep;
 use tracing::{Instrument, debug, error, info, info_span, warn};
 
@@ -83,10 +84,7 @@ pub fn init_crontab_worker() {
         info!(target: "crontab", "scheduler started");
         loop {
             sleep(Duration::from_secs(1)).await;
-
-            tokio::spawn(async move {
-                process_crontab().await;
-            });
+            process_crontab().await;
         }
     });
 }
@@ -102,6 +100,8 @@ async fn process_crontab() {
     let jobs = cache.get_enabled_entries().await;
 
     let now = Utc::now();
+
+    let mut set = JoinSet::new();
 
     for (model, schedule, cron_type) in jobs {
         let last_run = model.last_run_time.map_or_else(
@@ -164,13 +164,19 @@ async fn process_crontab() {
             job_id,
             job_name = %job_name,
         );
-        tokio::spawn(
+        set.spawn(
             async move {
                 run_job_logic(job_parsed).await;
                 debug!(target: "crontab", "cron job completed");
             }
             .instrument(span),
         );
+    }
+
+    while let Some(res) = set.join_next().await {
+        if let Err(e) = res {
+            error!(target: "crontab", error = %e, "cron job panicked");
+        }
     }
 }
 

@@ -61,6 +61,7 @@ impl RuntimeWorkerHandle {
     ) -> anyhow::Result<Value> {
         trace!(target: "js_runtime", "sending execute command to worker");
         self.active_requests.fetch_add(1, Ordering::SeqCst);
+        let _guard = ActiveRequestGuard(&self.active_requests);
 
         let send_result = (|| {
             let bytecode_hash = hash_bytes(&bytecode);
@@ -94,12 +95,19 @@ impl RuntimeWorkerHandle {
                 warn!(target: "js_runtime", error = %e, "Failed to read local timestamp for runtime worker");
             }
         }
-        self.active_requests.fetch_sub(1, Ordering::SeqCst);
 
         match response? {
             Ok(value) => Ok(value),
             Err(message) => Err(anyhow::anyhow!(message)),
         }
+    }
+}
+
+struct ActiveRequestGuard<'a>(&'a AtomicUsize);
+
+impl<'a> Drop for ActiveRequestGuard<'a> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
     }
 }
 
