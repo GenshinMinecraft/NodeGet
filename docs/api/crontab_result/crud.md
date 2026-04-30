@@ -153,9 +153,12 @@
 ```json
 {
   "token": "demo_token",
-  "delete_params": {
-    "cron_name": "cleanup_database", // 可选，若指定则只删除该 cron_name 的记录
-    "before_time": 1700000000000     // 删除该时间之前的记录（毫秒时间戳）
+  "query": {
+    "condition": [
+      // CrontabResultQueryCondition 结构体，该结构体参考 CrontabResult 总览
+      // 该字段为 Vec<_>，可指定多个
+      // delete 与 query 使用完全相同的 condition 语义
+    ]
   }
 }
 ```
@@ -191,15 +194,16 @@
 }
 ```
 
-- 若指定了 `cron_name`，则检查对该 cron_name 的删除权限
-- 若未指定 `cron_name`（删除所有），则需要全局删除权限 `{"delete": "*"}`
+- 若指定了 `cron_name` 条件，则检查对该 `cron_name` 的删除权限
+- 若未指定 `cron_name` 条件（删除所有匹配记录），则需要全局删除权限 `{"delete": "*"}`
 
 ### 返回值
 
 ```json
 {
-  "success": true,       // 是否成功
-  "deleted_count": 100   // 删除的记录数量
+  "success": true,         // 是否成功
+  "deleted": 100,          // 删除的记录数量
+  "condition_count": 3     // 条件数量
 }
 ```
 
@@ -215,16 +219,22 @@
   "method": "crontab-result_delete",
   "params": {
     "token": "demo_token",
-    "delete_params": {
-      "cron_name": "cleanup_database",
-      "before_time": 1700000000000
+    "query": {
+      "condition": [
+        {
+          "cron_name": "cleanup_database"
+        },
+        {
+          "run_time_to": 1700000000000
+        }
+      ]
     }
   },
   "id": 1
 }
 ```
 
-删除所有记录（需要全局删除权限）:
+删除指定 cron_name 的最近 10 条记录（需要对应权限）:
 
 ```json
 {
@@ -232,8 +242,35 @@
   "method": "crontab-result_delete",
   "params": {
     "token": "demo_token",
-    "delete_params": {
-      "before_time": 1700000000000
+    "query": {
+      "condition": [
+        {
+          "cron_name": "cleanup_database"
+        },
+        {
+          "limit": 10
+        }
+      ]
+    }
+  },
+  "id": 1
+}
+```
+
+删除所有失败记录（需要全局删除权限）:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "crontab-result_delete",
+  "params": {
+    "token": "demo_token",
+    "query": {
+      "condition": [
+        {
+          "is_failure": null
+        }
+      ]
     }
   },
   "id": 1
