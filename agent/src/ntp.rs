@@ -5,7 +5,7 @@ use tokio::net::UdpSocket;
 use tokio::time::{Duration, timeout};
 
 const DEFAULT_NTP_PORT: u16 = 123;
-const NTP_TIMEOUT: Duration = Duration::from_secs(2);
+const NTP_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Copy, Clone, Default)]
 struct StdTimestampGen {
