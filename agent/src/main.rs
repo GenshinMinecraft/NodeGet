@@ -104,10 +104,7 @@ async fn main() -> anyhow::Result<()> {
 
         // 仅在首次启动时查询 NTP 时间偏移，避免热重载时覆盖已有偏移导致时间跳变
         if NTP_INIT_DONE.get().is_none() {
-            let ntp_server = config
-                .ntp_server
-                .as_deref()
-                .unwrap_or("pool.ntp.org");
+            let ntp_server = config.ntp_server.as_deref().unwrap_or("pool.ntp.org");
             let ntp_offset = ntp::fetch_ntp_offset(ntp_server).await;
             println!("NTP time offset: {ntp_offset} ms");
             set_ntp_offset_ms(ntp_offset);

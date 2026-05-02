@@ -105,7 +105,7 @@ impl RuntimeWorkerHandle {
 
 struct ActiveRequestGuard<'a>(&'a AtomicUsize);
 
-impl<'a> Drop for ActiveRequestGuard<'a> {
+impl Drop for ActiveRequestGuard<'_> {
     fn drop(&mut self) {
         self.0.fetch_sub(1, Ordering::SeqCst);
     }

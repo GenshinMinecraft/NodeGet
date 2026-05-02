@@ -568,11 +568,10 @@ mod list_all_agent_uuid {
               EXISTS (SELECT 1 FROM dynamic_monitoring WHERE uuid_id = monitoring_uuid.id LIMIT 1) OR
               EXISTS (SELECT 1 FROM dynamic_monitoring_summary WHERE uuid_id = monitoring_uuid.id LIMIT 1)
         ";
-        let rows =
-            UuidRow::find_by_statement(Statement::from_string(db_backend, sql.to_string()))
-                .all(db)
-                .await
-                .map_err(|e| NodegetError::DatabaseError(e.to_string()))?;
+        let rows = UuidRow::find_by_statement(Statement::from_string(db_backend, sql.to_string()))
+            .all(db)
+            .await
+            .map_err(|e| NodegetError::DatabaseError(e.to_string()))?;
 
         let mut uuid_set = std::collections::BTreeSet::<Uuid>::new();
         for row in rows {
@@ -726,10 +725,10 @@ mod database_storage {
         Ok(result)
     }
 
-            #[derive(FromQueryResult)]
-            struct SizeRow {
-                table_size: i64,
-            }
+    #[derive(FromQueryResult)]
+    struct SizeRow {
+        table_size: i64,
+    }
 
     /// `SQLite`: 使用 dbstat 虚拟表查询各表占用的页面总大小
     async fn query_sqlite(db: &DatabaseConnection) -> anyhow::Result<BTreeMap<String, i64>> {

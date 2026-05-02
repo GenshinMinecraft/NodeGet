@@ -141,10 +141,9 @@ pub async fn query_dynamic_summary(
                     .column(dynamic_monitoring_summary::Column::ReceiveSpeed)
             }
         } else {
-            query_data
-                .fields
-                .iter()
-                .fold(query, |q, field| select_field(q, field, needs_app_descaling))
+            query_data.fields.iter().fold(query, |q, field| {
+                select_field(q, field, needs_app_descaling)
+            })
         };
 
         let mut limit_count = None;
@@ -239,7 +238,7 @@ pub async fn query_dynamic_summary(
 }
 
 /// Select a field into the query, applying /10.0 descaling for scaled fields
-/// when the backend supports expression aliases (PostgreSQL).
+/// when the backend supports expression aliases (`PostgreSQL`).
 fn select_field<E>(
     q: sea_orm::Select<E>,
     field: &DynamicSummaryQueryField,

@@ -30,7 +30,11 @@ pub mod token;
 /// Zero-allocation: returns borrowed slices into the original string.
 pub fn token_identity(token: &str) -> (&str, &str) {
     token.find(':').map_or_else(
-        || token.find('|').map_or(("???", ""), |pipe| ("", &token[..pipe])),
+        || {
+            token
+                .find('|')
+                .map_or(("???", ""), |pipe| ("", &token[..pipe]))
+        },
         |colon| (&token[..colon], ""),
     )
 }

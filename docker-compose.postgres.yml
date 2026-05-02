@@ -11,7 +11,7 @@ services:
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nodeget -d nodeget"]
+      test: [ "CMD-SHELL", "pg_isready -U nodeget -d nodeget" ]
       interval: 5s
       timeout: 5s
       retries: 20

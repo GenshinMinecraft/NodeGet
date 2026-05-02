@@ -111,10 +111,8 @@ pub async fn dynamic_summary_multi_last_query(
         for (idx, (uuid, uuid_id)) in uuid_id_pairs.iter().enumerate() {
             match last_cache.get_dynamic_summary_last(uuid, &fields).await {
                 Some(mut v) => {
-                    if needs_app_descaling {
-                        if let Some(obj) = v.as_object_mut() {
-                            nodeget_lib::monitoring::query::apply_descaling_to_json_object(obj);
-                        }
+                    if needs_app_descaling && let Some(obj) = v.as_object_mut() {
+                        nodeget_lib::monitoring::query::apply_descaling_to_json_object(obj);
                     }
                     results[idx] = Some(v);
                 }
@@ -122,51 +120,45 @@ pub async fn dynamic_summary_multi_last_query(
             }
         }
 
-        if !misses.is_empty() {
-            let miss_pairs: Vec<(Uuid, i16)> = misses
-                .iter()
-                .map(|(idx, _)| uuid_id_pairs[*idx])
-                .collect();
+        if misses.is_empty() {
+            debug!(target: "monitoring", uuids_count = uuid_id_pairs.len(), "Dynamic summary multi-last query full cache hit");
+        } else {
+            let miss_pairs: Vec<(Uuid, i16)> =
+                misses.iter().map(|(idx, _)| uuid_id_pairs[*idx]).collect();
             let statement = build_union_last_statement(&miss_pairs, &fields, db)?;
-            let miss_raw = execute_statement_query(db, statement, miss_pairs.len(), uuid_cache).await?;
+            let miss_raw =
+                execute_statement_query(db, statement, miss_pairs.len(), uuid_cache).await?;
             let miss_values: Vec<serde_json::Value> = serde_json::from_str(miss_raw.get())
-                .map_err(|e| {
-                    NodegetError::SerializationError(format!("Parse DB results: {e}"))
-                })?;
+                .map_err(|e| NodegetError::SerializationError(format!("Parse DB results: {e}")))?;
             for (i, val) in miss_values.into_iter().enumerate() {
                 let idx = misses[i].0;
                 results[idx] = Some(val);
             }
             debug!(target: "monitoring", cache_hits = uuid_id_pairs.len() - misses.len(), misses = misses.len(), "Dynamic summary multi-last query partial cache hit");
-        } else {
-            debug!(target: "monitoring", uuids_count = uuid_id_pairs.len(), "Dynamic summary multi-last query full cache hit");
         }
 
         // ── Unified serialization (cache + DB merged) ─────────────────
         let mut output_buffer: Vec<u8> = Vec::with_capacity(results.len().saturating_mul(200));
         output_buffer.push(b'[');
         let mut first = true;
-        for opt in results {
-            if let Some(value) = opt {
-                if first {
-                    first = false;
-                } else {
-                    output_buffer.push(b',');
-                }
-                if let Err(e) = serde_json::to_writer(&mut output_buffer, &value) {
-                    error!(target: "monitoring", error = %e, "Result serialization failed");
-                    return Err(NodegetError::SerializationError(format!(
-                        "Serialization failed: {e}"
-                    )).into());
-                }
+        for value in results.into_iter().flatten() {
+            if first {
+                first = false;
+            } else {
+                output_buffer.push(b',');
+            }
+            if let Err(e) = serde_json::to_writer(&mut output_buffer, &value) {
+                error!(target: "monitoring", error = %e, "Result serialization failed");
+                return Err(
+                    NodegetError::SerializationError(format!("Serialization failed: {e}")).into(),
+                );
             }
         }
         output_buffer.push(b']');
-        let json_string = String::from_utf8(output_buffer).map_err(|e| {
-            NodegetError::SerializationError(format!("UTF8 conversion error: {e}"))
-        })?;
-        return RawValue::from_string(json_string)
-            .map_err(|e| NodegetError::SerializationError(e.to_string()).into());
+        let json_string = String::from_utf8(output_buffer)
+            .map_err(|e| NodegetError::SerializationError(format!("UTF8 conversion error: {e}")))?;
+        RawValue::from_string(json_string)
+            .map_err(|e| NodegetError::SerializationError(e.to_string()).into())
     };
 
     match process_logic.await {
