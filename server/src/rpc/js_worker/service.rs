@@ -289,7 +289,7 @@ pub async fn enqueue_source_js_worker_run(
                 run_type,
                 params,
                 resolved_env,
-                Some(std::time::Duration::from_secs(300)),
+                Some(std::time::Duration::from_mins(5)),
             )
         })
         .await

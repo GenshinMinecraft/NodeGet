@@ -122,7 +122,8 @@ pub struct DynamicMonitoringSummaryData {
 }
 
 const VIRTUAL_INTERFACE_PREFIXES: &[&str] = &[
-    "br", "cni", "docker", "podman", "flannel", "lo", "veth", "virbr", "vmbr", "tap", "fwbr", "fwpr",
+    "br", "cni", "docker", "podman", "flannel", "lo", "veth", "virbr", "vmbr", "tap", "fwbr",
+    "fwpr",
 ];
 
 const EXCLUDED_MOUNT_PREFIXES: &[&str] = &[

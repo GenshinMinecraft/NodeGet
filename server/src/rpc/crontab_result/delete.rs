@@ -55,8 +55,10 @@ pub async fn delete(token: String, query: CrontabResultDataQuery) -> RpcResult<B
                     delete_query = delete_query.filter(crontab_result::Column::CronId.eq(cron_id));
                 }
                 CrontabResultQueryCondition::CronName(cron_name) => {
-                    select_query = select_query.filter(crontab_result::Column::CronName.eq(cron_name.clone()));
-                    delete_query = delete_query.filter(crontab_result::Column::CronName.eq(cron_name));
+                    select_query =
+                        select_query.filter(crontab_result::Column::CronName.eq(cron_name.clone()));
+                    delete_query =
+                        delete_query.filter(crontab_result::Column::CronName.eq(cron_name));
                 }
                 CrontabResultQueryCondition::RunTimeFromTo(start, end) => {
                     select_query = select_query.filter(
@@ -119,9 +121,7 @@ pub async fn delete(token: String, query: CrontabResultDataQuery) -> RpcResult<B
                     .exec(db)
                     .await
                     .map_err(|e| {
-                        NodegetError::DatabaseError(format!(
-                            "Failed to delete crontab_result: {e}"
-                        ))
+                        NodegetError::DatabaseError(format!("Failed to delete crontab_result: {e}"))
                     })?
                     .rows_affected
             }
@@ -130,9 +130,7 @@ pub async fn delete(token: String, query: CrontabResultDataQuery) -> RpcResult<B
                 .exec(db)
                 .await
                 .map_err(|e| {
-                    NodegetError::DatabaseError(format!(
-                        "Failed to delete crontab_result: {e}"
-                    ))
+                    NodegetError::DatabaseError(format!("Failed to delete crontab_result: {e}"))
                 })?
                 .rows_affected
         };
@@ -146,9 +144,7 @@ pub async fn delete(token: String, query: CrontabResultDataQuery) -> RpcResult<B
         debug!(target: "crontab_result", deleted_rows, condition_count, "crontab_result delete completed");
 
         let json_str = serde_json::to_string(&response).map_err(|e| {
-            NodegetError::SerializationError(format!(
-                "Failed to serialize delete response: {e}"
-            ))
+            NodegetError::SerializationError(format!("Failed to serialize delete response: {e}"))
         })?;
 
         RawValue::from_string(json_str)

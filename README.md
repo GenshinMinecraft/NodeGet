@@ -16,8 +16,8 @@
 </div>
 
 > [!IMPORTANT]
-> NodeGet 正处于 ***早期阶段***，如果你担心安全问题，请在正式发布 **v1.0.0** 版本后再进行使用 *(预计 2-3 周以内)*。遇到问题请及时报告
-
+> NodeGet 正处于 ***早期阶段***，如果你担心安全问题，请在正式发布 **v1.0.0** 版本后再进行使用 *(预计 2-3 周以内)*
+> 。遇到问题请及时报告
 
 ## **简介**
 
@@ -26,7 +26,8 @@ NodeGet 是一款基于 ***Rust*** 语言编写的服务器管理、监控软件
 本 NodeGet 具有超级牛力：
 
 - **完善的细粒度权限支持**：以 Token 系统为基础，所有系统都**强依赖本系统**，实现完全自定义的权限支持
-- **极高的可拓展性**：KV 系统实现任意数据存储，Js Worker 实现在原有架构基础上**无限向上拓展功能**。官方提供认证的 Js Worker 方便日常使用
+- **极高的可拓展性**：KV 系统实现任意数据存储，Js Worker 实现在原有架构基础上**无限向上拓展功能**。官方提供认证的 Js Worker
+  方便日常使用
 - **现代化的技术栈**：使用 ***Rust*** 作为底层语言，配合 ***PostgreSQL / SQLite*** 储存数据。
 
   数据通信使用 **WebSocket + JSON-RPC** 主流方案，符合现代微服务架构
@@ -60,7 +61,8 @@ NodeGet 是一款基于 ***Rust*** 语言编写的服务器管理、监控软件
 
 NodeGet 整个项目 ***并不是一个简单的探针项目***。相反，探针只是其微不足道的功能之一
 
-它更类似于 [Komari](https://github.com/komari-monitor/komari) / [Nezha](https://github.com/nezhahq/nezha) 探针系统 + [1Panel](https://1panel.cn/) 管理面板的结合体
+它更类似于 [Komari](https://github.com/komari-monitor/komari) / [Nezha](https://github.com/nezhahq/nezha)
+探针系统 + [1Panel](https://1panel.cn/) 管理面板的结合体
 
 你**并不一定需要**从其他类似项目迁移到此，NodeGet 可以很好地与同类项目相结合
 

@@ -146,8 +146,7 @@ impl ServerConfig {
                         if let Some(first_char) = after_trimmed.chars().next() {
                             if first_char == '\"' || first_char == '\'' {
                                 let rest = &after_trimmed[1..];
-                                if rest.len() >= 8 && rest[..8].eq_ignore_ascii_case("auto_gen")
-                                {
+                                if rest.len() >= 8 && rest[..8].eq_ignore_ascii_case("auto_gen") {
                                     let after_value = &rest[8..];
                                     new_content.push_str(before);
                                     new_content.push(' ');

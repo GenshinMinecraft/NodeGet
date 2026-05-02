@@ -1,7 +1,7 @@
 //! In-memory cache for the **latest** monitoring data per agent UUID.
 //!
 //! When an Agent reports static / dynamic / dynamic-summary data, the payload
-//! is stored here (in addition to being buffered for DB insert).  
+//! is stored here (in addition to being buffered for DB insert).\
 //! `*_multi_last_query` RPCs read from this cache **instead of hitting the
 //! database**, making last-record lookups O(1) and zero DB load.
 //!
@@ -53,7 +53,10 @@ impl MonitoringLastCache {
     /// Store the latest static monitoring data for `uuid`.
     pub async fn update_static(&self, uuid: Uuid, timestamp: i64, data: &StaticMonitoringData) {
         let mut obj = serde_json::Map::with_capacity(5);
-        obj.insert("uuid".to_owned(), serde_json::Value::String(uuid.to_string()));
+        obj.insert(
+            "uuid".to_owned(),
+            serde_json::Value::String(uuid.to_string()),
+        );
         obj.insert(
             "timestamp".to_owned(),
             serde_json::Value::Number(timestamp.into()),
@@ -77,7 +80,10 @@ impl MonitoringLastCache {
     /// Store the latest dynamic monitoring data for `uuid`.
     pub async fn update_dynamic(&self, uuid: Uuid, timestamp: i64, data: &DynamicMonitoringData) {
         let mut obj = serde_json::Map::with_capacity(9);
-        obj.insert("uuid".to_owned(), serde_json::Value::String(uuid.to_string()));
+        obj.insert(
+            "uuid".to_owned(),
+            serde_json::Value::String(uuid.to_string()),
+        );
         obj.insert(
             "timestamp".to_owned(),
             serde_json::Value::Number(timestamp.into()),
@@ -118,7 +124,10 @@ impl MonitoringLastCache {
         data: &DynamicMonitoringSummaryData,
     ) {
         let mut obj = serde_json::Map::with_capacity(24);
-        obj.insert("uuid".to_owned(), serde_json::Value::String(uuid.to_string()));
+        obj.insert(
+            "uuid".to_owned(),
+            serde_json::Value::String(uuid.to_string()),
+        );
         obj.insert(
             "timestamp".to_owned(),
             serde_json::Value::Number(timestamp.into()),

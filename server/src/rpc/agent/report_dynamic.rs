@@ -48,7 +48,11 @@ pub async fn report_dynamic(
 
         // Update in-memory last-cache (used by multi-last queries, zero DB hit)
         crate::monitoring_last_cache::MonitoringLastCache::global()
-            .update_dynamic(agent_uuid, dynamic_monitoring_data.time.cast_signed(), &dynamic_monitoring_data)
+            .update_dynamic(
+                agent_uuid,
+                dynamic_monitoring_data.time.cast_signed(),
+                &dynamic_monitoring_data,
+            )
             .await;
 
         let in_data = dynamic_monitoring::ActiveModel {
