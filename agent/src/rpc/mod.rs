@@ -105,7 +105,10 @@ pub async fn handle_error_message() {
                 let message = match rx.recv().await {
                     Ok(msg) => msg,
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                        warn!("[{}] Error handler lagged, dropped {n} messages", server.name);
+                        warn!(
+                            "[{}] Error handler lagged, dropped {n} messages",
+                            server.name
+                        );
                         continue;
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => {
@@ -116,23 +119,23 @@ pub async fn handle_error_message() {
                 {
                     let message = message;
                     let server_name = server.name.clone();
-                tokio::spawn(async move {
-                    let rpc = match message {
-                        Message::Text(text) => text.to_string(),
-                        _ => {
+                    tokio::spawn(async move {
+                        let rpc = match message {
+                            Message::Text(text) => text.to_string(),
+                            _ => {
+                                return;
+                            }
+                        };
+
+                        let Ok(json) = serde_json::from_str::<JsonRpcErrorMessage>(&rpc) else {
                             return;
-                        }
-                    };
+                        };
 
-                    let Ok(json) = serde_json::from_str::<JsonRpcErrorMessage>(&rpc) else {
-                        return;
-                    };
-
-                    warn!(
-                        "[{}] Received Error Message: {}: {}",
-                        server_name, json.result.error_id, json.result.error_message
-                    );
-                });
+                        warn!(
+                            "[{}] Received Error Message: {}: {}",
+                            server_name, json.result.error_id, json.result.error_message
+                        );
+                    });
                 }
             }
         });

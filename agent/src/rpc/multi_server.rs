@@ -201,8 +201,7 @@ async fn connection_manager(
 
                 let sub_ack = match timeout(Duration::from_secs(5), ws_read.next()).await {
                     Ok(Some(Ok(Message::Text(text)))) => {
-                        let v: serde_json::Value =
-                            serde_json::from_str(&text).unwrap_or_default();
+                        let v: serde_json::Value = serde_json::from_str(&text).unwrap_or_default();
                         if v.get("error").is_some() {
                             error!("[{name}] Task subscription rejected: {v}, reconnecting...");
                             continue;
@@ -216,11 +215,15 @@ async fn connection_manager(
                         continue;
                     }
                     Ok(None) => {
-                        error!("[{name}] Connection closed during task subscription, reconnecting...");
+                        error!(
+                            "[{name}] Connection closed during task subscription, reconnecting..."
+                        );
                         continue;
                     }
                     Ok(Some(Err(e))) => {
-                        error!("[{name}] Read error during task subscription: {e}, reconnecting...");
+                        error!(
+                            "[{name}] Read error during task subscription: {e}, reconnecting..."
+                        );
                         continue;
                     }
                     Ok(Some(Ok(_))) => {
