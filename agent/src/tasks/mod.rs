@@ -33,6 +33,7 @@ mod http_request;
 pub mod ping;
 // PTY（伪终端）模块
 mod pty;
+pub mod self_update;
 
 // 检查服务器是否允许执行特定任务
 fn is_task_allowed(server: &nodeget_lib::config::agent::Server, task_type: &TaskEventType) -> bool {
@@ -47,6 +48,7 @@ fn is_task_allowed(server: &nodeget_lib::config::agent::Server, task_type: &Task
         TaskEventType::EditConfig(_) => server.allow_edit_config.unwrap_or(false),
         TaskEventType::Ip => server.allow_ip.unwrap_or(false),
         TaskEventType::Version => server.allow_version.unwrap_or(false),
+        TaskEventType::SelfUpdate(_) => server.allow_self_update.unwrap_or(false),
     }
 }
 
@@ -126,6 +128,11 @@ async fn execute_task(
         TaskEventType::Version => {
             let version = nodeget_lib::utils::version::NodeGetVersion::get();
             Ok(TaskEventResult::Version(version))
+        }
+
+        TaskEventType::SelfUpdate(tag) => {
+            let success = self_update::self_update(tag).await;
+            Ok(TaskEventResult::SelfUpdate(success))
         }
     }
 }
