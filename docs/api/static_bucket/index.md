@@ -49,7 +49,7 @@ Config 中的 `static_path` 字段决定所有 bucket 的顶级磁盘根目录�
 - `path`：磁盘相对路径（相对 `static_path`），如 `sites/my-site`，允许 `/` 多级嵌套
 - `is_http_root`：是否接管根路由 `/`
 - `cors`：是否开启 `Access-Control-Allow-Origin: *`
-- `enable`：是否启用 HTTP 访问。`false` 时该 bucket 的 HTTP 入口返回 404（不影响 RPC 操作和 WebDAV）
+- `enable`：是否启用 HTTP 与 WebDAV 访问。`false` 时该 bucket 的 HTTP 入口与 WebDAV 入口均返回 404（不影响 RPC 操作）
 
 ## 注意事项
 

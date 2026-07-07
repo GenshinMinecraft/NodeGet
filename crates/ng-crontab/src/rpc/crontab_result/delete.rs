@@ -3,6 +3,7 @@
 use crate::query::{CrontabResultDataQuery, CrontabResultQueryCondition};
 use jsonrpsee::core::RpcResult;
 use ng_core::error::{NodegetError, anyhow_to_nodeget_error};
+use ng_core::utils::MAX_QUERY_LIMIT;
 use ng_db::entity::crontab_result;
 use ng_db::get_db;
 use sea_orm::{ColumnTrait, EntityTrait, ExprTrait, QueryFilter, QueryOrder, QuerySelect};
@@ -105,8 +106,7 @@ pub async fn delete(token: String, query: CrontabResultDataQuery) -> RpcResult<B
                     delete_query = delete_query.filter(crontab_result::Column::Success.eq(false));
                 }
                 CrontabResultQueryCondition::Limit(limit) => {
-                    const MAX_LIMIT: u64 = 10_000;
-                    limit_count = Some(std::cmp::min(limit, MAX_LIMIT));
+                    limit_count = Some(std::cmp::min(limit, MAX_QUERY_LIMIT));
                 }
                 CrontabResultQueryCondition::Last => {
                     is_last = true;

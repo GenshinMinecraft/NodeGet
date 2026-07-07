@@ -48,7 +48,7 @@ pub struct Token {
     pub token_key: String,         // 标识 Token 最主要的键
     pub timestamp_from: Option<i64>, // Token 有效期，毫秒时间戳
     pub timestamp_to: Option<i64>,
-    pub token_limit: Vec<Limit>,   // 权限范围
+    pub token_limit: Arc<Vec<Limit>>,   // 权限范围（Arc 包裹，鉴权层零拷贝 clone）
     pub username: Option<String>,  // 用户名
 }
 ```

@@ -9,6 +9,7 @@ use crate::auth::{
 use jsonrpsee::core::RpcResult;
 use ng_core::error::NodegetError;
 use ng_core::js_result::query::{JsResultDataQuery, JsResultQueryCondition};
+use ng_core::utils::{DEFAULT_RESULT_QUERY_LIMIT, MAX_QUERY_LIMIT};
 use ng_db::entity::js_result;
 use ng_db::get_db;
 use sea_orm::{ColumnTrait, EntityTrait, ExprTrait, QueryFilter, QueryOrder, QuerySelect};
@@ -139,8 +140,7 @@ pub async fn query(token: String, query: JsResultDataQuery) -> RpcResult<Box<Raw
             match condition {
                 JsResultQueryCondition::Limit(limit) => {
                     // 单次查询上限 10000 条，防止返回过多数据
-                    const MAX_LIMIT: u64 = 10_000;
-                    limit_count = Some(std::cmp::min(*limit, MAX_LIMIT));
+                    limit_count = Some(std::cmp::min(*limit, MAX_QUERY_LIMIT));
                 }
                 JsResultQueryCondition::Last => {
                     is_last = true;
@@ -150,9 +150,6 @@ pub async fn query(token: String, query: JsResultDataQuery) -> RpcResult<Box<Raw
                 }
             }
         }
-
-        /// 查询默认 LIMIT，客户端未指定时使用此值。
-        const DEFAULT_LIMIT: u64 = 1000;
 
         if is_last {
             select = select
@@ -168,7 +165,7 @@ pub async fn query(token: String, query: JsResultDataQuery) -> RpcResult<Box<Raw
             select = select
                 .order_by_desc(js_result::Column::StartTime)
                 .order_by_desc(js_result::Column::Id)
-                .limit(DEFAULT_LIMIT);
+                .limit(DEFAULT_RESULT_QUERY_LIMIT);
         }
 
         let results = select

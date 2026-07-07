@@ -44,7 +44,7 @@ GET /nodeget/static/{name}/{*path}
 访问示例：
 
 ```bash
-curl http://localhost:3000/nodeget/static/my-site/index.html
+curl http://localhost:2211/nodeget/static/my-site/index.html
 ```
 
 当 `cors: true` 时，响应头会携带：
@@ -66,7 +66,7 @@ Access-Control-Allow-Origin: *
 示例：
 
 ```bash
-curl http://localhost:3000/index.html
+curl http://localhost:2211/index.html
 # 实际返回磁盘上 {static_path}/{path}/index.html 的内容（path 为该 bucket 记录里的 path 字段）
 ```
 
@@ -115,17 +115,17 @@ sudo mount -t davfs http://服务器IP:端口/nodeget/static-webdav/hugo /mnt/hu
 
 ```bash
 # PROPFIND（列出目录）
-curl -X PROPFIND http://localhost:3000/nodeget/static-webdav/hugo/ \
+curl -X PROPFIND http://localhost:2211/nodeget/static-webdav/hugo/ \
   -H "Authorization: Basic $(echo -n 'key:secret' | base64)" \
   -H "Content-Type: text/xml"
 
 # PUT（上传文件）
-curl -X PUT http://localhost:3000/nodeget/static-webdav/hugo/test.txt \
+curl -X PUT http://localhost:2211/nodeget/static-webdav/hugo/test.txt \
   -H "Authorization: Basic $(echo -n 'key:secret' | base64)" \
   -d "hello webdav"
 
 # DELETE（删除文件）
-curl -X DELETE http://localhost:3000/nodeget/static-webdav/hugo/test.txt \
+curl -X DELETE http://localhost:2211/nodeget/static-webdav/hugo/test.txt \
   -H "Authorization: Basic $(echo -n 'key:secret' | base64)"
 ```
 

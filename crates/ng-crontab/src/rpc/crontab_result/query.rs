@@ -3,6 +3,7 @@
 use crate::query::{CrontabResultDataQuery, CrontabResultQueryCondition};
 use jsonrpsee::core::RpcResult;
 use ng_core::error::{NodegetError, anyhow_to_nodeget_error};
+use ng_core::utils::MAX_QUERY_LIMIT;
 use ng_db::entity::crontab_result;
 use ng_db::get_db;
 use sea_orm::{ColumnTrait, EntityTrait, ExprTrait, QueryFilter, QueryOrder, QuerySelect};
@@ -68,8 +69,7 @@ pub async fn query(token: String, query: CrontabResultDataQuery) -> RpcResult<Bo
                     select = select.filter(crontab_result::Column::Success.eq(false));
                 }
                 CrontabResultQueryCondition::Limit(limit) => {
-                    const MAX_LIMIT: u64 = 10_000;
-                    select = select.limit(std::cmp::min(*limit, MAX_LIMIT));
+                    select = select.limit(std::cmp::min(*limit, MAX_QUERY_LIMIT));
                 }
                 CrontabResultQueryCondition::Last => {
                     // 按 run_time 降序排序，只取第一条

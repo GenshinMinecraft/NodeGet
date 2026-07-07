@@ -6,6 +6,7 @@ use jsonrpsee::core::RpcResult;
 use ng_core::error::NodegetError;
 use ng_core::permission::data_structure::{Permission, Scope, Task};
 use ng_core::permission::token_auth::TokenOrAuth;
+use ng_core::utils::MAX_QUERY_LIMIT;
 use ng_db::entity::task;
 use ng_db::rpc::RpcHelper;
 use sea_orm::sea_query::{Alias, BinOper, Expr, LikeExpr};
@@ -189,8 +190,7 @@ pub async fn delete(
                 }
                 TaskQueryCondition::Limit(n) => {
                     // 钳制上限，避免 select 出海量 id 致 Vec<i64> OOM。与 crontab_result 对齐。
-                    const MAX_LIMIT: u64 = 10_000;
-                    limit_count = Some(std::cmp::min(n, MAX_LIMIT));
+                    limit_count = Some(std::cmp::min(n, MAX_QUERY_LIMIT));
                 }
                 TaskQueryCondition::Last => {
                     is_last = true;

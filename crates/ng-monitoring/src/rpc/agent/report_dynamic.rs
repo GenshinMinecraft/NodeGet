@@ -103,12 +103,10 @@ pub async fn report_dynamic(
 
         debug!(target: "monitoring", agent_uuid = %dynamic_monitoring_data.uuid, "Received dynamic data, sending to buffer");
 
-        monitoring_buffer::get()
+        monitoring_buffer::with_buffers(|b| b.dynamic_mon.send(in_data))
             .ok_or_else(|| {
                 NodegetError::ConfigNotFound("MonitoringBuffers not initialized".to_owned())
-            })?
-            .dynamic_mon
-            .send(in_data);
+            })?;
 
         let cache_value = build_dynamic_value_prebuilt(
             agent_uuid,

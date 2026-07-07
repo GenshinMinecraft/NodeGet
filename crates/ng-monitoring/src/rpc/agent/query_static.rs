@@ -14,6 +14,7 @@ use ng_core::permission::data_structure::{Permission, Scope, StaticMonitoring};
 use ng_core::permission::token_auth::TokenOrAuth;
 use ng_core::utils::error_message::anyhow_error_to_raw;
 use ng_core::utils::server_json::rename_and_fix_json;
+use ng_core::utils::{DEFAULT_MONITORING_QUERY_LIMIT, MAX_QUERY_LIMIT};
 use ng_db::entity::static_monitoring;
 use ng_infra::server::RpcHelper;
 use ng_token::get::check_token_limit;
@@ -43,8 +44,6 @@ pub async fn query_static(
     token: String,
     static_data_query: StaticDataQuery,
 ) -> RpcResult<Box<RawValue>> {
-    const DEFAULT_LIMIT: u64 = 10_000;
-    const MAX_LIMIT: u64 = 10_000;
     let process_logic = async {
         debug!(target: "monitoring", conditions_count = static_data_query.condition.len(), fields_count = static_data_query.fields.len(), "Static query request received");
 
@@ -174,7 +173,7 @@ pub async fn query_static(
                 }
             });
 
-        let clamped_limit = limit_count.map(|l| std::cmp::min(l, MAX_LIMIT));
+        let clamped_limit = limit_count.map(|l| std::cmp::min(l, MAX_QUERY_LIMIT));
 
         let query = if is_last {
             query
@@ -187,7 +186,7 @@ pub async fn query_static(
         } else {
             query
                 .order_by(static_monitoring::Column::Timestamp, Order::Asc)
-                .limit(DEFAULT_LIMIT)
+                .limit(DEFAULT_MONITORING_QUERY_LIMIT)
         };
 
         let field_mappings: Vec<(&str, &str)> = static_data_query

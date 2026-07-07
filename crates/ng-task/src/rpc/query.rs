@@ -7,6 +7,7 @@ use jsonrpsee::core::RpcResult;
 use ng_core::error::NodegetError;
 use ng_core::permission::data_structure::{Permission, Scope, Task};
 use ng_core::permission::token_auth::TokenOrAuth;
+use ng_core::utils::{DEFAULT_RESULT_QUERY_LIMIT, MAX_QUERY_LIMIT};
 use ng_db::entity::task;
 use ng_db::rpc::RpcHelper;
 use sea_orm::sea_query::{Alias, BinOper, Expr, LikeExpr};
@@ -176,9 +177,8 @@ pub async fn query(token: String, task_data_query: TaskDataQuery) -> RpcResult<B
 
                 TaskQueryCondition::Limit(n) => {
                     // 钳制上限，避免 `n*500` 预分配回绕 / DB 物化海量行导致 OOM。
-                    // 与 crontab_result/js_result 的 MAX_LIMIT=10000 对齐。
-                    const MAX_LIMIT: u64 = 10_000;
-                    limit_count = Some(std::cmp::min(n, MAX_LIMIT));
+                    // 与 crontab_result/js_result 的 MAX_QUERY_LIMIT=10000 对齐。
+                    limit_count = Some(std::cmp::min(n, MAX_QUERY_LIMIT));
                 }
 
                 TaskQueryCondition::Last => {
@@ -187,9 +187,7 @@ pub async fn query(token: String, task_data_query: TaskDataQuery) -> RpcResult<B
             }
         }
 
-        /// 默认查询上限 1000 条，客户端需要更多时须显式指定 `Limit` 条件
-        const DEFAULT_LIMIT: u64 = 1000;
-
+        // 默认查询上限 1000 条，客户端需要更多时须显式指定 `Limit` 条件
         if is_last {
             query = query
                 .order_by(task::Column::Timestamp, Order::Desc)
@@ -204,7 +202,7 @@ pub async fn query(token: String, task_data_query: TaskDataQuery) -> RpcResult<B
             query = query
                 .order_by(task::Column::Timestamp, Order::Asc)
                 .order_by(task::Column::Id, Order::Asc)
-                .limit(DEFAULT_LIMIT);
+                .limit(DEFAULT_RESULT_QUERY_LIMIT);
         }
 
         let mut stream = query.into_json().stream(db).await.map_err(|e| {
@@ -212,7 +210,9 @@ pub async fn query(token: String, task_data_query: TaskDataQuery) -> RpcResult<B
             NodegetError::DatabaseError(format!("Database query error: {e}"))
         })?;
 
-        let capacity = limit_count.unwrap_or(DEFAULT_LIMIT).saturating_mul(500) as usize;
+        let capacity = limit_count
+            .unwrap_or(DEFAULT_RESULT_QUERY_LIMIT)
+            .saturating_mul(500) as usize;
         let mut output_buffer: Vec<u8> = Vec::with_capacity(capacity);
 
         output_buffer.push(b'[');

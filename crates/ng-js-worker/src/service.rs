@@ -151,23 +151,9 @@ pub async fn enqueue_defined_js_worker_run(
         env_override.unwrap_or_else(|| model.env.unwrap_or_else(|| serde_json::json!({})));
     let run_type_text = run_type.as_str().to_owned();
 
+    // 执行计时起点（insert_js_result_row 内部自取 start_time 写库，此处独立用于耗时统计）
     let start_time = get_local_timestamp_ms_i64().unwrap_or(0);
-    let insert_result = js_result::Entity::insert(js_result::ActiveModel {
-        id: ActiveValue::NotSet,
-        js_worker_id: Set(worker_id),
-        js_worker_name: Set(worker_name.clone()),
-        run_type: Set(run_type_text),
-        start_time: Set(Some(start_time)),
-        finish_time: Set(None),
-        param: Set(Some(params.clone())),
-        result: Set(None),
-        error_message: Set(None),
-    })
-    .exec(&db)
-    .await
-    .map_err(|e| NodegetError::DatabaseError(e.to_string()))?;
-
-    let js_result_id = insert_result.last_insert_id;
+    let js_result_id = insert_js_result_row(&db, worker_id, &worker_name, run_type_text, &params).await?;
     trace!(target: "js_worker", js_result_id = js_result_id, worker = %worker_name, "spawning bytecode execution task");
 
     tokio::spawn(async move {
@@ -309,21 +295,14 @@ pub async fn run_inline_call_and_record_result(
     let env = model.env.unwrap_or_else(|| serde_json::json!({}));
 
     let start_time = get_local_timestamp_ms_i64().unwrap_or(0);
-    let insert_result = js_result::Entity::insert(js_result::ActiveModel {
-        id: ActiveValue::NotSet,
-        js_worker_id: Set(worker_id),
-        js_worker_name: Set(worker_name.clone()),
-        run_type: Set(RunType::InlineCall.as_str().to_owned()),
-        start_time: Set(Some(start_time)),
-        finish_time: Set(None),
-        param: Set(Some(params.clone())),
-        result: Set(None),
-        error_message: Set(None),
-    })
-    .exec(&db)
-    .await
-    .map_err(|e| NodegetError::DatabaseError(e.to_string()))?;
-    let js_result_id = insert_result.last_insert_id;
+    let js_result_id = insert_js_result_row(
+        &db,
+        worker_id,
+        &worker_name,
+        RunType::InlineCall.as_str().to_owned(),
+        &params,
+    )
+    .await?;
 
     let target_script_name = worker_name.clone();
     let run_task = tokio::task::spawn_blocking(move || {
@@ -446,23 +425,9 @@ pub async fn enqueue_source_js_worker_run(
         env_override.unwrap_or_else(|| model.env.unwrap_or_else(|| serde_json::json!({})));
     let run_type_text = run_type.as_str().to_owned();
 
+    // 执行计时起点（insert_js_result_row 内部自取 start_time 写库，此处独立用于耗时统计）
     let start_time = get_local_timestamp_ms_i64().unwrap_or(0);
-    let insert_result = js_result::Entity::insert(js_result::ActiveModel {
-        id: ActiveValue::NotSet,
-        js_worker_id: Set(worker_id),
-        js_worker_name: Set(worker_name.clone()),
-        run_type: Set(run_type_text),
-        start_time: Set(Some(start_time)),
-        finish_time: Set(None),
-        param: Set(Some(params.clone())),
-        result: Set(None),
-        error_message: Set(None),
-    })
-    .exec(&db)
-    .await
-    .map_err(|e| NodegetError::DatabaseError(e.to_string()))?;
-
-    let js_result_id = insert_result.last_insert_id;
+    let js_result_id = insert_js_result_row(&db, worker_id, &worker_name, run_type_text, &params).await?;
 
     let worker_name_for_log = worker_name.clone();
     trace!(target: "js_worker", js_result_id = js_result_id, worker = %worker_name_for_log, "spawning source mode execution task");
@@ -526,4 +491,34 @@ pub async fn enqueue_source_js_worker_run(
     });
 
     Ok(js_result_id)
+}
+
+/// 插入一条 `js_result` 行（start_time 已填，finish_time/result/error_message 为 None）。
+///
+/// 三个执行入口（字节码池 / 源码一次性 / 内联调用）的插入逻辑完全一致，统一在此 helper
+/// 完成，避免 ActiveModel 字面量三处重复粘贴。后续的 update（回填执行结果）因各入口的
+/// 字段与触发条件差异较大，仍由各入口自行处理。
+async fn insert_js_result_row(
+    db: &sea_orm::DatabaseConnection,
+    worker_id: i64,
+    worker_name: &str,
+    run_type_text: String,
+    params: &Value,
+) -> Result<i64, NodegetError> {
+    let start_time = get_local_timestamp_ms_i64().unwrap_or(0);
+    let insert_result = js_result::Entity::insert(js_result::ActiveModel {
+        id: ActiveValue::NotSet,
+        js_worker_id: Set(worker_id),
+        js_worker_name: Set(worker_name.to_owned()),
+        run_type: Set(run_type_text),
+        start_time: Set(Some(start_time)),
+        finish_time: Set(None),
+        param: Set(Some(params.clone())),
+        result: Set(None),
+        error_message: Set(None),
+    })
+    .exec(db)
+    .await
+    .map_err(|e| NodegetError::DatabaseError(e.to_string()))?;
+    Ok(insert_result.last_insert_id)
 }

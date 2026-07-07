@@ -116,7 +116,7 @@ from 8 crates:
 | `static-bucket`      | ng-static              | Static bucket CRUD                                                                                                                               |
 | `static-bucket-file` | ng-static              | Static file operations                                                                                                                           |
 
-All RPC methods return `RpcResult<Box<RawValue>>` via the `rpc_exec!` macro for uniform logging.
+Most business RPC methods return `RpcResult<Box<RawValue>>` via the `rpc_exec!` macro for uniform logging; exceptions exist (subscriptions like `task.register_task` / `nodeget-server.stream_log`, plus a few token-less server methods such as `hello`/`version`/`uuid`).
 
 ### Caching Pattern
 

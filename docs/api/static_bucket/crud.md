@@ -74,7 +74,7 @@
 }
 ```
 
-> 注：`enable` 字段创建时默认为 `null`。Bucket 默认处于启用状态，只有当 `enable` 显式设置为 `false` 时才会停止 HTTP 服务。
+> 注：`enable` 字段创建时默认为 `null`。Bucket 默认处于启用状态，只有当 `enable` 显式设置为 `false` 时才会同时停止 HTTP 与 WebDAV 服务。
 
 ## Read
 

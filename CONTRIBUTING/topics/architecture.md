@@ -31,19 +31,21 @@ Server binary 是**组合根（composition root）**，在 `server/src/rpc_nodeg
 
 | 命名空间 | 提供方 crate | 方法数 | 详见 |
 |----------|--------------|--------|------|
-| `nodeget-server` | server + ng-monitoring + ng-db + ng-config | 12（含 `list_all_agent_uuid`） | [server](../binaries/nodeget-server.md) |
-| `agent` | ng-monitoring | 多个查询/删除/上报方法 | [ng-monitoring](../crates/ng-monitoring.md) |
+| `nodeget-server` | server + ng-monitoring + ng-db + ng-config | 11 方法 + 1 订阅（`stream_log`）；其中 `list_all_agent_uuid` 来自 ng-monitoring | [server](../binaries/nodeget-server.md) |
+| `agent` | ng-monitoring | 12 | [ng-monitoring](../crates/ng-monitoring.md) |
 | `agent-uuid` | ng-monitoring | 3 | [ng-monitoring](../crates/ng-monitoring.md) |
-| `task` | ng-task | 6 | [ng-task](../crates/ng-task.md) |
+| `task` | ng-task | 6（5 方法 + 1 订阅） | [ng-task](../crates/ng-task.md) |
 | `token` | ng-token | 7 | [ng-token](../crates/ng-token.md) |
 | `kv` | ng-kv | 8 | [ng-kv](../crates/ng-kv.md) |
 | `db` | ng-db | 6 | [ng-db](../crates/ng-db.md) |
 | `js-worker` | ng-js-worker | 7 | [ng-js-worker](../crates/ng-js-worker.md) |
 | `js-result` | ng-js-worker | 2 | [ng-js-worker](../crates/ng-js-worker.md) |
-| `crontab` | ng-crontab | 6 | [ng-crontab](../crates/ng-crontab.md) |
+| `crontab` | ng-crontab | 5 | [ng-crontab](../crates/ng-crontab.md) |
 | `crontab-result` | ng-crontab | 2 | [ng-crontab](../crates/ng-crontab.md) |
-| `static-bucket` | ng-static | 6 | [ng-static](../crates/ng-static.md) |
+| `static-bucket` | ng-static | 5 | [ng-static](../crates/ng-static.md) |
 | `static-bucket-file` | ng-static | 5 | [ng-static](../crates/ng-static.md) |
+
+> 合计 **13 个命名空间**（共 78 个 `#[method]` + 2 个 `#[subscription]`）。订阅仅 2 个：`task.register_task` 与 `nodeget-server.stream_log`。
 
 多数业务 crate 的 RPC handler 返回 `RpcResult<Box<RawValue>>`，并广泛复用 `rpc_exec!` 做结果日志与错误桥接；但这不是“所有 RPC 无例外”的硬规则——订阅、少量 server 自身方法与部分辅助路径存在例外。Terminal 走独立 WebSocket（非 JSON-RPC）。
 
@@ -133,7 +135,7 @@ main() → async_main()
       init_or_skip_super_token()（幂等生成 super-token id=1）
       ★ 注册 4 个当前 trait provider（PermissionChecker / JsWorkerService / JsWorkerScheduler / MonitoringUuidProvider）
       ★ 初始化所有 DbBackedCache（Token / Crontab / Static / MonitoringUuid）
-      build_modules() 合并 14 个 RPC 命名空间
+      build_modules() 合并 13 个 RPC 命名空间（9 次 `.merge()`，部分 crate 内部再合并多命名空间）
       build Router（RPC + 静态 + WebDAV + terminal + worker-route）
       select! shutdown / RELOAD_NOTIFY
   → 热重载：收到 RELOAD_NOTIFY → 重新读 config → reload 所有缓存 → 重启 loop（不重新注入 trait）

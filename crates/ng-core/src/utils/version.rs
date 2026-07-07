@@ -39,7 +39,7 @@ pub struct NodeGetVersion {
     pub rustc_llvm_version: String,
 }
 
-/// OnceLock 缓存实例，避免每次调用分配 14 个堆 String
+/// OnceLock 缓存实例，避免每次调用分配 13 个堆 String
 static VERSION_CACHE: std::sync::OnceLock<NodeGetVersion> = std::sync::OnceLock::new();
 
 impl NodeGetVersion {

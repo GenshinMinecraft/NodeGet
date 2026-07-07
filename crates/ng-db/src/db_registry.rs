@@ -78,8 +78,8 @@ impl DbRegistryManager {
     ///
     /// # Panics
     ///
-    /// 若 `Mutex` 被 poison（仅当其他持有者在持锁期间 panic 时可能发生），或
-    /// `OnceLock` 内部 `expect` 失败时会 panic
+    /// 若 `OnceLock` 内部 `expect` 失败（如全局单例已被占用且非首次 init）时会 panic。
+    /// 内部 `Mutex` 即便被 poison 也通过 `into_inner` 恢复，不会 panic。
     #[allow(clippy::unused_async)]
     pub async fn init(db_path: String) -> Arc<Self> {
         static INIT: std::sync::Once = std::sync::Once::new();
@@ -98,7 +98,7 @@ impl DbRegistryManager {
                 }
                 mgr_clone.start_cleanup_loop().await;
             });
-            *mgr_inner.cleanup_handle.lock().unwrap() = Some(handle);
+            *mgr_inner.cleanup_handle.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(handle);
             let _ = MGR.set(mgr_inner);
         });
         Arc::clone(
@@ -455,13 +455,11 @@ impl DbRegistryManager {
     /// - 设置 `cancelled` 标志并通过 `cancel_notify` 唤醒清理循环
     /// - 最多等待 5 秒，超时则输出警告
     ///
-    /// # Panics
-    ///
-    /// 若内部 Mutex 被 poison（仅当其他持有者在持锁期间 panic 时可能发生）则会 panic
+    /// 内部 `Mutex` 即便被 poison 也通过 `into_inner` 恢复，不会 panic。
     pub async fn shutdown(&self) {
         self.cancelled.store(true, Ordering::SeqCst);
         self.cancel_notify.notify_one();
-        let handle = self.cleanup_handle.lock().unwrap().take();
+        let handle = self.cleanup_handle.lock().unwrap_or_else(std::sync::PoisonError::into_inner).take();
         if let Some(handle) = handle {
             match tokio::time::timeout(std::time::Duration::from_secs(5), handle).await {
                 Ok(Ok(())) => info!(target: "db", "DbRegistry cleanup loop exited cleanly"),

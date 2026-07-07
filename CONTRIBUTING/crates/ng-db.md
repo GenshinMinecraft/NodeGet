@@ -64,7 +64,7 @@ crates/ng-db/migration/src/
 | `DbRegistryManager::create_conn` | `pub async fn create_conn(&self, name: &str, max_lifetime_ms: Option<i64>) -> anyhow::Result<DatabaseConnection>` (`db_registry.rs:306`) | 连接 `sqlite://...` URL、设 PRAGMA，再 upsert `db_registry`（存在则 `db_connections +=1`，否则插入新行带 `created_at=now_ms`），最后插入 `pools`。**不校验 name**。 |
 | `DbRegistryManager::remove_conn` | `pub async fn remove_conn(&self, name: &str) -> anyhow::Result<()>` (`db_registry.rs:385`) | 先移除 `pools` 条目，再尝试查主库并删除 `db_registry` 行，随后删除 `{name}.db` 及 `-wal`/`-shm` 文件。`get_main_db()` 或注册表查询失败会直接返回 `Err`；`delete_by_id` 与文件删除失败仅记录日志。 |
 | `DbRegistryManager::list_all` | `pub async fn list_all(&self) -> anyhow::Result<Vec<DbInfo>>` (`db_registry.rs:429`) | `db_registry::find` 按 name 升序，映射为 `DbInfo`（`is_active` 取自 `pools.contains_key`）。 |
-| `DbRegistryManager::shutdown` | `pub async fn shutdown(&self)` (`db_registry.rs:461`) | 置 `cancelled`、`notify_one()`，`cleanup_handle.lock().unwrap().take()` 后以 5 秒超时 await，记录结果（clean exit / panic / timeout）。 |
+| `DbRegistryManager::shutdown` | `pub async fn shutdown(&self)` (`db_registry.rs:461`) | 置 `cancelled`、`notify_one()`，`cleanup_handle.lock().unwrap_or_else(PoisonError::into_inner).take()` 后以 5 秒超时 await，记录结果（clean exit / panic / timeout）。 |
 | `row_to_json` | `pub fn row_to_json(r: &sea_orm::QueryResult) -> serde_json::Value` (`db_registry.rs:523`, server) | 按 `column_names()` 迭代，每列调 `try_column_as_json`，返回 Object。 |
 | `json_to_sea_value` | `pub fn json_to_sea_value(json: &Value) -> sea_orm::Value` (`db_registry.rs:578`, server, `#[must_use]`) | Null→Json(None)，Bool→Bool，Number→BigInt/BigUnsigned/Double（不可表示则 String），String→String，Array/Object→Json(Some(Box))。 |
 | `db::Rpc` / `RpcServer` | `#[rpc(server, namespace="db")] pub trait Rpc { ... }` (`rpc/db/mod.rs:55`, server) | 6 个方法，全部返回 `RpcResult<Box<RawValue>>`；由 `DbRpcImpl` 实现。 |
@@ -72,7 +72,7 @@ crates/ng-db/migration/src/
 | `validate_db_name` | `pub fn validate_db_name(name: &str) -> anyhow::Result<()>` (`rpc/db/auth.rs:67`, server) | 非空、`len<=128`、仅 `[A-Za-z0-9_.-]`、不为 `.` 或 `..`；否则返回 `NodegetError::InvalidInput`。 |
 | `token_identity` | `pub fn token_identity(token: &str) -> (&str,&str)` (`rpc/mod.rs:33`) | 按 `:` 切分得 `(key,"")`，否则按 `|` 得 `("",username)`，否则 `("???","")`。零分配借用。 |
 | `rpc_exec!` | `macro` (`rpc/mod.rs:71`, `#[macro_export]`) | Ok 时 `debug!(target:"rpc", response=%TruncatedRaw(&raw))`（截断 1024 字节）；Err 时 `error!(target:"rpc", error=%e)`。 |
-| `RpcHelper` | `pub trait RpcHelper` (`rpc/mod.rs:87`, server) | blanket 实现：`try_set_json<T:Serialize>()->Result<ActiveValue<Value>>`（失败 `SerializationError`）、`get_db()->Result<&'static DatabaseConnection>`（未初始化 `DatabaseError`）。 |
+| `RpcHelper` | `pub trait RpcHelper` (`rpc/mod.rs:87`, server) | 带 default method 的 trait（非 blanket impl）：`try_set_json<T:Serialize>()->Result<ActiveValue<Value>>`（失败 `SerializationError`）、`get_db()->Result<&'static DatabaseConnection>`（未初始化 `DatabaseError`）；各 RPC impl struct 以空 `impl RpcHelper for X {}` 复用默认实现。 |
 | `to_rpc_error` | `pub fn to_rpc_error(e: &anyhow::Error) -> ErrorObject<'static>` (`rpc/mod.rs:114`, server, `#[must_use]`) | 经 `anyhow_to_nodeget_error` 转 `NodegetError`，用 `error_code()` 作 i32 code、Display 作 message，无 data。 |
 
 ## 关键类型与常量
@@ -99,8 +99,7 @@ crates/ng-db/migration/src/
 
 ### db 命名空间（`rpc/db/`）
 
-- `pub struct DbRpcImpl` (`rpc/db/mod.rs:98`) — `impl RpcHelper for DbRpcImpl {}`；每个方法构建 target 为 `"db"` 的 `info_span!`（字段 `token_key`/`username`/`name`，exec 另带 `sql_len`），通过 `rpc_exec!` 委托给子模块函数。
-- 死代码占位结构 `NameParam{name}`/`RenameParam{name,new_name}`/`ExecSqlParam{name,sql,params:Option<Value>}` (`rpc/db/mod.rs:25`) — 均 `#[derive(Deserialize)]` 且 `#[allow(dead_code)]`，**不参与实际 RPC 反序列化**。
+- `pub struct DbRpcImpl` (`rpc/db/mod.rs:93`) — `impl RpcHelper for DbRpcImpl {}`；每个方法构建 target 为 `"db"` 的 `info_span!`（字段 `token_key`/`username`/`name`，exec 另带 `sql_len`），通过 `rpc_exec!` 委托给子模块函数。
 
 ### nodeget 命名空间（`rpc/nodeget/`）
 
@@ -129,7 +128,7 @@ serve.rs 调用 `init_db_connection(DbConnectionConfig)`：建连 → 在 `Migra
 
 ### 锁纪律
 
-`seed_from_dbreg` 在写锁**之外**构建连接（sqlite 建连 + PRAGMA 的磁盘 I/O），仅插入时取写锁。`cleanup_expired` 读锁下收集候选，**释放锁后**再查 `db_registry` 与删除——绝不在 DB 往返期间持锁。除 `init`/`shutdown` 中对 `cleanup_handle` 使用 `.unwrap()` 外，其余锁获取均用 `unwrap_or_else(PoisonError::into_inner)` 以在他人 panic 后存活。
+`seed_from_dbreg` 在写锁**之外**构建连接（sqlite 建连 + PRAGMA 的磁盘 I/O），仅插入时取写锁。`cleanup_expired` 读锁下收集候选，**释放锁后**再查 `db_registry` 与删除——绝不在 DB 往返期间持锁。所有锁获取（含 `cleanup_handle`）均用 `unwrap_or_else(PoisonError::into_inner)`，即便他人 panic 后也能存活。
 
 ### db.update 三阶段重命名
 
@@ -206,24 +205,23 @@ serve.rs 调用 `init_db_connection(DbConnectionConfig)`：建连 → 在 `Migra
 - **RPC 写法**：一律 `#[rpc(server, namespace=...)]` + `#[method(name=...)]`，**禁止**手写 `register_method`。所有方法返回 `RpcResult<Box<RawValue>>`。方法体包裹 `async { rpc_exec!(...) }.instrument(info_span!(...))`，span 字段含 `token_key`/`username`/`name`（exec 另含 `sql_len`）。宏内部**不含** `await`。
 - **鉴权集中化**：经 `ng_core::permission::permission_checker::get_permission_checker()`；db 命名空间构造 `Scope::Db(name)` + `Permission::Db(perm)`，`list`/`storage`/`exec_sql` 用 `Scope::Global`。错误统一 `NodegetError` → `anyhow` → `to_rpc_error` → jsonrpsee `ErrorObject`（带 nodeget error code）。
 - **响应形状一致**：create/read/update/list 为 `{"success": true, "data": ...}`；exec_sql 为 `{"success": true, "data":[], "row_count": n, "truncated": bool}`。截断阈值硬编码 **10_000 行**。
-- **中文注释**贯穿；辅助结构（`TableSizeRow`/`TableNameRow`）保持私有；未用 param 结构（`NameParam`/`RenameParam`/`ExecSqlParam`）以 `#[allow(dead_code)]` 占位。
+- **中文注释**贯穿；辅助结构（`TableSizeRow`/`TableNameRow`）保持私有。
 
 ## 注意事项与陷阱
 
 - **维护者必须**保证系统时钟不早于 1970：`now_ms_u64()` 在 `db_registry.rs:60` 调用 `.expect("System time is before UNIX epoch")`，错误时钟会让 `get_conn`/`create_conn`/`cleanup_expired` 与清理循环 panic。
 - **切勿**假设 SQLite 连接级 PRAGMA（`busy_timeout`、`foreign_keys`）会在连接池轮换后保持：它们是连接级而非持久化（`db_connection.rs:103`）。仅 WAL/synchronous/cache_size（库级）会持久。轮换连接可能让外键 enforcement 静默失效。
 - **切勿**对从旧版本升级的库假设 `auto_vacuum=INCREMENTAL` 已生效：该 PRAGMA 仅在空库时生效，旧库仍为 NONE（`db_connection.rs:92`）。
-- **维护者必须**在调用 `DbRegistryManager::create_conn` 前校验 name：该方法用 `format!("sqlite://{db_path}/{name}.db?mode=rwc")` 拼接 URL 而**不**调用 `validate_db_name`（`db_registry.rs:316`）。RPC handler 已校验，但任何新调用方都必须先校验，否则攻击者可控 name 会触发路径穿越（如 `../x`）。
+- **维护者必须**在调用 `DbRegistryManager::create_conn` 前校验 name：该方法用 `format!("sqlite://{db_path}/{name}.db?mode=rwc")` 拼接 URL 而**不**调用 `validate_db_name`（`db_registry.rs:311`，`create_conn` 入口在 `:306`）。RPC handler 已校验，但任何新调用方都必须先校验，否则攻击者可控 name 会触发路径穿越（如 `../x`）。
 - **维护者必须**让 `seed_from_dbreg` 的内联校验与 `validate_db_name` 保持同步：前者在 `db_registry.rs:121` 手写一遍规则（`len<=128`、`[A-Za-z0-9_.-]`、非 `.`/`..`）；规则漂移会导致 seed 进 RPC 校验会拒绝的条目（或反之）。
-- **维护者必须**确认"过期 = 近期无查询活动"语义是否符合预期：`cleanup_expired` 以 `now - last_used >= lifetime_ms` 判定，`last_used` 仅由 `get_conn`/`create_conn` 刷新（`db_registry.rs:243`）。注册后从未查询的库其 `last_used` 冻结于创建/seed 时刻，可能被驱逐；热库则永不过期。
-- **切勿**遗忘 `remove_conn` 会**永久删除** `.db`/`-wal`/`-shm` 文件：`cleanup_expired` 对闲置连接调用它（`db_registry.rs:404`），无软删除——被驱逐的用户库数据永久丢失。
+- **维护者必须**确认"过期 = 近期无查询活动"语义是否符合预期：`cleanup_expired` 以 `now - last_used >= lifetime_ms` 判定，`last_used` 仅由 `get_conn`（`db_registry.rs:283`）/`create_conn`（`db_registry.rs:364`）刷新。注册后从未查询的库其 `last_used` 冻结于创建/seed 时刻，可能被驱逐；热库则永不过期。
+- **切勿**遗忘 `remove_conn` 会**永久删除** `.db`/`-wal`/`-shm` 文件：`cleanup_expired` 对闲置连接调用它（`db_registry.rs:244`，`remove_conn` 函数本体在 `:385`），无软删除——被驱逐的用户库数据永久丢失。
 - **维护者必须**仅将 `NodeGet::ExecSql` 授予完全受信的操作员，并在最小权限 uid 下运行 server：`nodeget::exec_sql` 是文档化的全信任权限，SQLite 下 `ATTACH DATABASE 'any/path'` 可在 server uid 下读写任意文件（创建/覆盖文件、读取其它 `.db`），绕过 `db_registry` 路径约束（`rpc/nodeget/exec_sql.rs:1`）。此为 by-design，无法禁用。
 - **切勿**调整 `create`/`update`/`delete` 中"先校验 name 再鉴权"的顺序：该顺序是刻意的（`rpc/db/create.rs:32`）——使未授权调用方带非法 name 时得到 `InvalidInput`（108）而非 `PermissionDenied`（102），且避免用未校验的 name 构造 `Scope`。`read.rs` 不校验 name（仅鉴权 + 查找）；任何新增的、从 name 构造路径或 `Scope` 的 db 命名空间方法**必须**先校验。
 - **维护者必须**告知调用方：`db.update` 第三阶段池刷新失败时**不回滚**（`rpc/db/update.rs:121`）。若 `remove_conn(old)` 成功而 `create_conn(new)` 失败，DB 与文件已一致（已重命名）但新连接不在池中——RPC 仍返回 success（仅 warn）。这里提示的 `create_conn` 是 `DbRegistryManager` 的内部 Rust API，不是公开 RPC；普通 RPC 客户端当前没有重新打开既有注册表项的接口，通常需要服务端内部补建连接或重启后重新 seed。
-- **切勿**修改 `NameParam`/`RenameParam`/`ExecSqlParam` 期望改变 wire 格式：它们是 `#[allow(dead_code)]` 占位（`rpc/db/mod.rs:23`），实际反序列化由 jsonrpsee `#[method]` 的原始类型签名决定；要改格式须改 `Rpc` trait 的方法签名。
 - **维护者必须**仅通过 server 启动时的 `Migrator::up` 应用迁移：`ng-migration` 二进制的 `main()` 已注释（`migration/src/main.rs:2`），`cargo run -p ng-migration` 为 no-op；手动跑 CLI 须先取消注释。
 - **切勿**在存在 `get_db()` 活引用时调用 `take_and_close_db`：它是 `unsafe`，经 `(&raw const DB).cast_mut()` + `(*ptr).take()` 回收（`lib.rs:66`），且 `#[allow(dead_code)]` 无任何调用方。应将全局 DB 视作与进程同寿。
-- **维护者必须**警惕 `cleanup_handle` 锁非 poison 容忍：除 `init`（`db_registry.rs:101`）与 `shutdown`（`:464`）对 `cleanup_handle` 用 `.unwrap()` 外，其余锁获取均 `unwrap_or_else(PoisonError::into_inner)`。若任务在持 `cleanup_handle` 时 panic，init/shutdown 会传播 poison panic。
+- **`cleanup_handle` 锁 poison 恢复**：`init`（`db_registry.rs:101`）与 `shutdown`（`:464`）对 `cleanup_handle` 均用 `unwrap_or_else(PoisonError::into_inner)`，与其它锁一致——即便任务在持 `cleanup_handle` 时 panic 致锁毒化，init/shutdown 也能恢复而非 panic。
 - **维护者必须**对 `exec_sql_inner`（db 命名空间，`rpc/db/exec_sql.rs:30`）与 `nodeget::exec_sql` 同步修改：两者为近似重复代码（分别作用于用户池与主库），截断/参数解析/行映射的任何修复**必须**同时落到两者，否则会漂移；当前无共享的 execute+truncate+to_json 流水线 helper。
 
 ## 依赖关系

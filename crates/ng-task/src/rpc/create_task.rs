@@ -12,7 +12,7 @@ use ng_db::rpc::RpcHelper;
 use sea_orm::{ActiveValue, EntityTrait, Set};
 use serde_json::value::RawValue;
 use std::sync::Arc;
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 use uuid::Uuid;
 
 /// 校验任务类型参数是否合法
@@ -106,7 +106,9 @@ pub async fn create_task(
 
         // Ensure the uuid is registered in the monitoring_uuid table (authoritative Agent table)
         if let Some(uuid_provider) = crate::rpc::monitoring_uuid_provider() {
-            let _ = uuid_provider.get_or_insert(target_uuid).await;
+            if let Err(e) = uuid_provider.get_or_insert(target_uuid).await {
+                warn!(target: "task", uuid = %target_uuid, error = %e, "Failed to register monitoring_uuid; agent will re-register on next report");
+            }
         }
 
         let task = TaskEvent {

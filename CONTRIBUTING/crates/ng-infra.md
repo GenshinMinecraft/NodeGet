@@ -45,7 +45,7 @@
 - **`make_global_cache!`** — `crates/ng-infra/src/server.rs:94`。`#[macro_export]`；定义位于 `#[cfg(feature = "server")]` 模块中，宏体内部用 `$crate::server::DbBackedCache`。
 - **`token_identity`** — `crates/ng-infra/src/server.rs:173`。位置型：先查 `:` 再查 `|`。
 - **`TruncatedRaw<'a>`** — `crates/ng-infra/src/server.rs:186`。`pub` 字段，可 `TruncatedRaw(&raw)` 内联构造；`Display` 实现见 `server.rs:188`。
-- **截断阈值**：**1024 字节**，写死（`server.rs:197`）。
+- **截断阈值**：**1024 字节**，写死（`server.rs:190`，`const MAX: usize = 1024;`）。
 - **错误回退哨兵**：token_identity 无法识别分隔符时返回 `("???", "")`。
 - **`rpc_exec!`** — `crates/ng-infra/src/server.rs:216`。`#[macro_export]`；宏体直接调用 `tracing::debug!` / `tracing::error!`。
 - **`RpcHelper`** — `crates/ng-infra/src/server.rs:242`。默认方法 helper trait；文件顶部混合导入 sea_orm 的 `ActiveValue`/`Set` 与 ng-core 的 `NodegetError`（`server.rs:17-18`）。
@@ -113,7 +113,7 @@ CLAUDE.md 列出的实际消费者：TokenCache、CrontabCache、StaticCache、M
 
 - **`is_allowed` 为 O(n) 线性扫描**（`crates/ng-infra/src/permission.rs:34`）。允许列表大的场景会变热；虽然 `Scope` 已实现 `Hash`，但 `ScopedPermission` 当前仍存 `Vec`，查找成本不会自动改善。
 - **`token_identity` 优先 `:` 后 `|`**（`crates/ng-infra/src/server.rs:174-182`）。Token 模式（`key:secret`）恒胜；维护者必须保证 Token 的 key/secret 与 Auth 的 username 严格遵循分隔符约定——username 一旦含 `:` 会被误判为 Token 模式。
-- **`TruncatedRaw` 依赖 `str::floor_char_boundary(1024)`**（`crates/ng-infra/src/server.rs:197`），为已稳定 nightly API；截断阈值 1024 字节写死，超大 RawValue 在 RPC 日志里会被截断（刻意为之，但会隐藏部分调试细节）。
+- **`TruncatedRaw` 依赖 `str::floor_char_boundary(1024)`**（`crates/ng-infra/src/server.rs:197`，使用点；常量 `MAX=1024` 定义于 `:190`），该 API 自 Rust 1.80（2024-07）起稳定，已不再属 nightly；截断阈值 1024 字节写死，超大 RawValue 在 RPC 日志里会被截断（刻意为之，但会隐藏部分调试细节）。
 - **`make_global_cache!::init()` 重复调用静默回退 reload**（`crates/ng-infra/src/server.rs:106-128`）。若并发已初始化，init 走 reload 路径只打一条 warn；返回的 `Ok(())` 不区分首次与回退分支，调用者无法判断走了哪条。
 - **DB 未初始化有两种错误变体**（`crates/ng-infra/src/server.rs:42-44` vs `258-260`）：`load_from_db` 抛 `ConfigNotFound`，`RpcHelper::get_db` 抛 `DatabaseError`。按变体匹配 missing-DB 时两者都要处理。
 - **`DbBackedCache` 的 `#[allow(async_fn_in_trait)]`**（`crates/ng-infra/src/server.rs:61`）：`load_all` 的 `impl Future + Send` 受 trait 约束，但 `reload_from_models` 的 auto-future 除 `Self: Send + Sync` 外不继承额外 Send bound；跨多线程 runtime await 的实现者必须自行确保 future 为 Send。
@@ -123,4 +123,4 @@ CLAUDE.md 列出的实际消费者：TokenCache、CrontabCache、StaticCache、M
 
 ## 依赖关系
 
-ng-infra 在 workspace 内始终依赖 `ng-core`、`anyhow`、`serde`；`server` feature 下额外依赖 `ng-db`、`sea-orm`、`serde_json`。下游方向：当前在 `server` feature 下依赖 ng-infra 的业务 crate 包括 `ng-token`、`ng-crontab`、`ng-static`、`ng-monitoring`、`ng-kv`、`ng-js-worker` 等，用于复用 `DbBackedCache` + `make_global_cache!` 缓存单例模式、`rpc_exec!` 日志宏与 `RpcHelper`。ng-task 当前不依赖 ng-infra，而是继续使用 `ng_db::rpc::{RpcHelper, token_identity}` 与 `ng_db::rpc_exec`。Agent 二进制当前也不依赖 ng-infra；不过默认 feature 公开项保持 Agent-safe。`RpcDispatcher` 目前仅定义在 ng-infra 中，server 二进制的 `server/src/rpc_nodeget.rs::build_modules()` 直接合并 `jsonrpsee::RpcModule<()>`。
+ng-infra 在 workspace 内始终依赖 `ng-core`、`anyhow`、`serde`；`server` feature 下额外依赖 `ng-db`、`sea-orm`、`serde_json`。下游方向：当前在 `server` feature 下声明依赖 ng-infra 的业务 crate 包括 `ng-token`、`ng-crontab`、`ng-static`、`ng-monitoring`、`ng-kv`、`ng-js-worker`、`ng-terminal`、`ng-js-runtime`。其中前六个直接复用 `DbBackedCache` + `make_global_cache!` 缓存单例模式、`rpc_exec!` 日志宏与 `RpcHelper`；`ng-terminal` 与 `ng-js-runtime` 主要通过 `dep:ng-infra` + `ng-infra/server` 拉取传递依赖（如 `ng-db/server`），源码中未必直接 `use ng_infra::`。ng-task 当前不依赖 ng-infra，而是继续使用 `ng_db::rpc::{RpcHelper, token_identity}` 与 `ng_db::rpc_exec`。Agent 二进制当前也不依赖 ng-infra；不过默认 feature 公开项保持 Agent-safe。`RpcDispatcher` 目前仅定义在 ng-infra 中，server 二进制的 `server/src/rpc_nodeget.rs::build_modules()` 直接合并 `jsonrpsee::RpcModule<()>`。

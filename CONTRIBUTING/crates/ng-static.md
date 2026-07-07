@@ -107,13 +107,13 @@ crates/ng-static/src/
 | `get_or_create_dav_handler` | `router.rs:52` | `fn(bucket_name, disk_path) -> DavHandler`：读锁快路径；写锁慢路径双检；用 `LocalFs(disk_path,false,false,false)` + `FakeLs` locksystem + `strip_prefix("/nodeget/static-webdav/{bucket_name}")` 构建；缓存并 clone（DavHandler 内部为 Arc，clone 便宜） |
 | `guess_mime_type` | `router.rs:154` | `fn(path: &Path) -> &'static str`：扩展名→MIME 表，回退 `application/octet-stream`。覆盖 html/css/js/json/png/jpg/gif/svg/ico/woff2/woff/ttf/txt/xml/wasm |
 | `serve_static_file` | `router.rs:190` | `async fn(sub_path, path, cors, method, if_none_match) -> Response<HttpBody>`：仅 GET/HEAD（其它→405 带 Allow）；`resolve_safe_file_path`；bucket 根请求映射到 `index.html`，若目标缺失则额外尝试 `{path}/index.html`；弱 ETag（`mtime_secs-size`）；If-None-Match 命中→304；设置 Content-Type、ETag、`X-Content-Type-Options:nosniff`、可选 CORS `ACAO:*`；HEAD 不带 body |
-| `build_etag` | `router.rs:300` | `fn(metadata) -> String`：`format!("\"{}-{}\"", mtime_secs, size)`；仅用于缓存协商的弱校验器 |
-| `if_none_match_is_match` | `router.rs:313` | `fn(Option<&str>, etag) -> bool`：`*` 匹配全部；支持逗号列表；剥离 `W/` 弱前缀 |
-| `static_webdav_handler` | `router.rs:333` | `async fn(Request) -> Response`：从 URI 解析 bucket name；查 StaticCache（enable==Some(false)→404）；提取 Basic Auth（base64 解码）；先按 `user:pass` 再按 `user|pass` 尝试 `TokenOrAuth` 解析；一次性检查全部四个 StaticBucketFile 权限（Read/Write/Delete/List）于 `Scope::StaticBucket(name)`；`get_or_create_dav_handler`；`dav.handle(req).into_response()` |
-| `build_webdav_auth_required` | `router.rs:481` | `fn() -> Response`：401 带 `WWW-Authenticate: Basic realm="NodeGet Static WebDAV"` |
-| `build_webdav_error` | `router.rs:493` | `fn(status, message) -> Response`：401/403 等 WebDAV 错误纯文本 body；无 CORS |
-| `build_http_error` | `router.rs:505` | `fn(status, message) -> Response<HttpBody>`：静态文件路由纯文本错误；无 CORS |
-| `build_static_error` | `router.rs:520` | `fn(status, message, cors) -> Response<HttpBody>`：可选附加 `ACAO:*` 让浏览器可读错误 body |
+| `build_etag` | `router.rs:320` | `fn(metadata) -> String`：`format!("\"{}-{}\"", mtime_secs, size)`；仅用于缓存协商的弱校验器 |
+| `if_none_match_is_match` | `router.rs:317` | `fn(Option<&str>, etag) -> bool`：`*` 匹配全部；支持逗号列表；剥离 `W/` 弱前缀 |
+| `static_webdav_handler` | `router.rs:353` | `async fn(Request) -> Response`：从 URI 解析 bucket name；查 StaticCache（enable==Some(false)→404）；提取 Basic Auth（base64 解码）；先按 `user:pass` 再按 `user|pass` 尝试 `TokenOrAuth` 解析；一次性检查全部四个 StaticBucketFile 权限（Read/Write/Delete/List）于 `Scope::StaticBucket(name)`；`get_or_create_dav_handler`；`dav.handle(req).into_response()` |
+| `build_webdav_auth_required` | `router.rs:501` | `fn() -> Response`：401 带 `WWW-Authenticate: Basic realm="NodeGet Static WebDAV"` |
+| `build_webdav_error` | `router.rs:513` | `fn(status, message) -> Response`：401/403 等 WebDAV 错误纯文本 body；无 CORS |
+| `build_http_error` | `router.rs:525` | `fn(status, message) -> Response<HttpBody>`：静态文件路由纯文本错误；无 CORS |
+| `build_static_error` | `router.rs:540` | `fn(status, message, cors) -> Response<HttpBody>`：可选附加 `ACAO:*` 让浏览器可读错误 body |
 
 ### 权限辅助（`crates/ng-static/src/auth.rs`）
 
@@ -149,11 +149,11 @@ crates/ng-static/src/
 
 ### enable flag semantics
 
-HTTP 路由将 `enable==Some(false)` 视为 404（`router.rs:95,126`）；WebDAV 路由与之对齐：`enable==Some(false)`→404（`router.rs:364`，新增以消除「HTTP 404 但 WebDAV 仍开放」的不一致）。`enable==None` 与 `enable==Some(true)` 均正常服务。
+HTTP 路由将 `enable==Some(false)` 视为 404（`router.rs:95,126`）；WebDAV 路由与之对齐：`enable==Some(false)`→404（`router.rs:384`，新增以消除「HTTP 404 但 WebDAV 仍开放」的不一致）。`enable==None` 与 `enable==Some(true)` 均正常服务。
 
 ### DavHandler double-checked locking
 
-`router.rs:64-66` 双检模式：读锁快路径返回 clone 的 handler；未命中则取写锁、再检查、再构建并缓存。DavHandler clone 便宜（内部 Arc）。锁中毒会通过 `.expect` panic（`router.rs:46,62`）——这点与可从中毒恢复的 StaticCache 不同。
+`router.rs:64-66` 双检模式：读锁快路径返回 clone 的 handler；未命中则取写锁、再检查、再构建并缓存。DavHandler clone 便宜（内部 Arc）。锁中毒会通过 `unwrap_or_else(PoisonError::into_inner)` 恢复（`router.rs:46,62`），与 StaticCache 的中毒恢复策略一致。
 
 ### RPC instrumentation
 
@@ -161,7 +161,7 @@ HTTP 路由将 `enable==Some(false)` 视为 404（`router.rs:95,126`）；WebDAV
 
 ### WebDAV auth flow
 
-`static_webdav_handler`（`router.rs:333`）手动从 URI 解析 bucket name（避开 axum 多段 Path 提取器的段数不匹配），剥离前缀 `/nodeget/static-webdav/`，在首个 `/` 处分割。鉴权：要求 Basic 头，base64 解码后先按 `user:pass` 尝试 `TokenOrAuth::from_full_token`，失败再回退 `user|pass`。在单次 `check_token_limit` 调用中要求全部四个 StaticBucketFile 权限。
+`static_webdav_handler`（`router.rs:353`）手动从 URI 解析 bucket name（避开 axum 多段 Path 提取器的段数不匹配），剥离前缀 `/nodeget/static-webdav/`，在首个 `/` 处分割。鉴权：要求 Basic 头，base64 解码后先按 `user:pass` 尝试 `TokenOrAuth::from_full_token`，失败再回退 `user|pass`。在单次 `check_token_limit` 调用中要求全部四个 StaticBucketFile 权限。
 
 ## RPC 方法
 
@@ -226,10 +226,10 @@ HTTP 路由将 `enable==Some(false)` 视为 404（`router.rs:95,126`）；WebDAV
 - **`crates/ng-static/src/ops.rs:74`**：配置热加载（static_path 变更）后**必须**调用 `reload_static_path()`。`get_static_path()` 仅在缓存为空时重读 config，否则永远返回旧值。此外 `clear_dav_handler_cache()` 不会在仅 config 变更时被调用——config reload 钩子必须同时调用二者，否则缓存 DavHandler 仍指向旧磁盘路径。
 - **`crates/ng-static/src/ops.rs:400`**：`delete_static` 仅删 DB 行，磁盘目录 `{static_path}/{path}` 永不移除；`update_static` 改 `path` 也不迁移旧目录内容。维护者**切勿**假设磁盘状态与 DB 状态一致。
 - **`crates/ng-static/src/cache.rs:106`**：`cache.build_maps` 对重复 `is_http_root` 的 warn 是防御性兜底，不是主约束来源。当前迁移在 SQLite/PostgreSQL 上为 `is_http_root=true` 建了 partial unique index，`ops` 层查询检查提供更早的业务错误；只有不支持 partial index 的后端（如 MySQL）才主要依赖应用层约束。
-- **`crates/ng-static/src/router.rs:32`**：DavHandler 缓存锁使用 `.expect`（中毒即 panic，`router.rs:46,62`），与可恢复中毒的 StaticCache 不同。持写锁时 panic 会中毒锁并使所有后续 WebDAV 请求崩溃。
+- **`crates/ng-static/src/router.rs:32`**：DavHandler 缓存锁用 `unwrap_or_else(PoisonError::into_inner)` 恢复中毒（`router.rs:46,62`），与 StaticCache 一致——持写锁时即便 panic 致锁毒化，后续 WebDAV 请求与 `clear_dav_handler_cache`（update/delete_static/reload 路径）仍可恢复而非崩溃。
 - **`crates/ng-static/src/router.rs:198`**：静态文件路由仅服务 GET/HEAD，其它→405。OPTIONS 预检仅在 `model.cors==true` 时由路由 handler 处理（`router.rs:96,128`）——非 CORS bucket 对 OPTIONS 返回 405。CORS 预检路径返回 `Allow-Methods: "GET, HEAD, OPTIONS"`，而 405 路径返回 `Allow: "GET, HEAD, OPTIONS"`；header 名不一致是设计（一个是普通 405，一个是 CORS 预检）。
 - **`crates/ng-static/src/router.rs:402`**：WebDAV Basic Auth 先按 `user:pass` 再回退 `user|pass` 解析。因 Basic Auth 在首个 `:` 处分割，token key 或 password 内含 `:` 会错误分割。token 格式为 `key:secret`（或 `username|password`）；回退覆盖 `|` 形式，但用户名部分含 `:` 无法通过 Basic Auth 表达。
-- **`crates/ng-static/src/router.rs:419`**：WebDAV 在单次 `check_token_limit` 调用中要求全部四个 StaticBucketFile 权限。RPC 层（`auth.rs`）每次只查一个权限——因此仅有 Read 的 token 仍可调用 `static-bucket-file.read`，但**永远无法**使用 WebDAV。
+- **`crates/ng-static/src/router.rs:448`**：WebDAV 在单次 `check_token_limit` 调用中要求全部四个 StaticBucketFile 权限。RPC 层（`auth.rs`）每次只查一个权限——因此仅有 Read 的 token 仍可调用 `static-bucket-file.read`，但**永远无法**使用 WebDAV。
 - **`crates/ng-static/src/ops.rs:562`**：`list_file` 在 `spawn_blocking` 下调用同步的 `collect_files`。它通过 `symlink_metadata` 跳过符号链接；但 `resolve_safe_file_path` **不**作用于 list 结果——`collect_files` 直接遍历磁盘，且 read/write/delete/rename 的 lexical path 校验也不会 canonicalize 或阻止已落盘 symlink 被后续 I/O 跟随。当前文档只能如实描述这一点，不应把 lexical `starts_with` 说成 symlink 防线。
 - **`crates/ng-static/src/router.rs:300`**：ETag 为 `"{mtime_secs}-{size}"`——弱校验器。mtime 秒级 + 相同 size 的两个不同文件会碰撞；保持 size 与亚秒级 mtime 的内容变更不会让客户端缓存失效（返回 304）。对静态服务可接受，但**不是**内容哈希。
 - **`crates/ng-static/src/ops.rs:621`**：`rename_file` 要求源存在（否则 NotFound），from/to 均须安全解析到同一 bucket 根下。**不支持跨 bucket 重命名**，即便 token 对两个 bucket 均有权限——设计如此（两条路径锚定同一 `model.path`）。

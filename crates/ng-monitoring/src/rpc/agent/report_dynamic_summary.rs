@@ -102,12 +102,10 @@ pub async fn report_dynamic_summary(
 
         debug!(target: "monitoring", agent_uuid = %data.uuid, "Received dynamic summary data, sending to buffer");
 
-        monitoring_buffer::get()
+        monitoring_buffer::with_buffers(|b| b.dynamic_summary.send(in_data))
             .ok_or_else(|| {
                 NodegetError::ConfigNotFound("MonitoringBuffers not initialized".to_owned())
-            })?
-            .dynamic_summary
-            .send(in_data);
+            })?;
 
         MonitoringLastCache::global()
             .ok_or_else(|| {

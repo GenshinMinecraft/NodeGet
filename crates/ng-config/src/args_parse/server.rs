@@ -68,7 +68,6 @@ impl ServerArgs {
         }
 
         let args = Self::parse();
-        // todo: add check
         args
     }
 

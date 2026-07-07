@@ -44,7 +44,7 @@ agent/
 
 ## 入口与启动流程
 
-`main` (`agent/src/main.rs:106`)，签名 `async fn main() -> anyhow::Result<()>>`：
+`main` (`agent/src/main.rs:107`)，签名 `async fn main() -> anyhow::Result<()>>`：
 
 1. 安装 rustls aws-lc-rs provider（幂等，吞 AlreadyInstalled 错误）。
 2. `AgentArgs::par()` 解析 CLI；处理 `--version`（打印后 `exit(0)`）。
@@ -66,12 +66,12 @@ reload 触发点：`tasks/mod.rs` 中 EditConfig 成功后 `sleep 300ms` 再 `RE
 
 | 名称 | 签名 | 行为 |
 |---|---|---|
-| `main` (`main.rs:106`) | `async fn main() -> anyhow::Result<()>` | 入口；完整流程见上节 |
+| `main` (`main.rs:107`) | `async fn main() -> anyhow::Result<()>` | 入口；完整流程见上节 |
 | `config_access::get_agent_config` (`config_access.rs:26`) | `pub fn get_agent_config() -> Result<Arc<AgentConfig>, NodegetError>` | Arc::clone 返回配置快照，O(1)；未初始化/RwLock 中毒 -> `NodegetError` |
 | `config_access::current_agent_uuid` (`config_access.rs:41`) | `pub fn current_agent_uuid() -> uuid::Uuid` | 直接读 `agent_uuid`；未初始化/中毒 **panic**（不可恢复不变式） |
 | `config_access::current_agent_uuid_string` (`config_access.rs:57`) | `pub fn current_agent_uuid_string() -> String` | 同上，返回 `.to_string()` |
 | `dry_run::dry_run` (`dry_run.rs:18`) | `pub async fn dry_run()` | 采集一轮静态+动态数据并打日志；普通启动/重载路径也会执行这一轮，本身不做 flag 判断，`main` 在调用后根据 `--dry-run` 决定是否立即退出 |
-| `ntp::fetch_ntp_offset` (`ntp.rs:46`) | `pub async fn fetch_ntp_offset(ntp_server: &str) -> i64` | 解析主机名对应的全部 `SocketAddr`，按地址族分别 bind `0.0.0.0:0` / `[::]:0` 并并发发起 NTP 探测，哪个地址先成功就采用哪个结果；偏移由 `(us/1000.0).round() as i64` 转 ms；全部失败返回 0 |
+| `ntp::fetch_ntp_offset` (`ntp.rs:47`) | `pub async fn fetch_ntp_offset(ntp_server: &str) -> i64` | 解析主机名对应的全部 `SocketAddr`，按地址族分别 bind `0.0.0.0:0` / `[::]:0` 并并发发起 NTP 探测，哪个地址先成功就采用哪个结果；偏移由 `(us/1000.0).round() as i64` 转 ms；全部失败返回 0 |
 | `monitoring::init_process_count_ticker` (`monitoring/mod.rs:27`) | `pub fn init_process_count_ticker()` | 幂等；通过 std `OnceLock` 仅启动一次 5s 进程计数 ticker |
 | `rpc::wrap_json_into_rpc_with_id_1` (`rpc/mod.rs:56`) | `pub fn wrap_json_into_rpc_with_id_1(method: &str, params: Vec<serde_json::Value>) -> String` | 构造 id=1 的 JSON-RPC 字符串；序列化失败时返回 `-32603` 错误字符串而非 panic |
 | `rpc::monitoring_data_report::build_rpc_with_raw_data` (`rpc/monitoring_data_report.rs:64`) | `pub fn build_rpc_with_raw_data(method: &str, token: &str, data_json: &str) -> String` | 手工拼装 id=1 请求：token 走 serde 转义，`data_json` 原样嵌入（必须已是合法 JSON） |
@@ -134,10 +134,10 @@ reload 触发点：`tasks/mod.rs` 中 EditConfig 成功后 `sleep 300ms` 再 `RE
 |---|---|---|
 | `TASK_MAX_TIMEOUT` (`tasks/mod.rs:40`) | 10 分钟 | 任何非 WebShell 任务在 per-message JoinSet 槽的硬上限 |
 | `TASK_POOL_MAX_CONCURRENCY` (`tasks/mod.rs:43`) | 10 | 网络任务并发许可 |
-| `TASK_POOL_PER_TASK_TIMEOUT` (`tasks/mod.rs:43`) | 10s | 单任务硬超时（覆盖子任务自带超时） |
-| `TASK_POOL` (`tasks/mod.rs:43`) | `Semaphore(10)` | Ping/TcpPing/HttpPing/HttpRequest/Ip/Dns 走池；WebShell/Execute/ReadConfig/EditConfig/Version/SelfUpdate 不走池（`is_pool_managed` `tasks/mod.rs:119` const fn） |
+| `TASK_POOL_PER_TASK_TIMEOUT` (`tasks/mod.rs:51`) | 10s | 单任务硬超时（覆盖子任务自带超时） |
+| `TASK_POOL` (`tasks/mod.rs:99`) | `Semaphore(10)` | Ping/TcpPing/HttpPing/HttpRequest/Ip/Dns 走池；WebShell/Execute/ReadConfig/EditConfig/Version/SelfUpdate 不走池（`is_pool_managed` `tasks/mod.rs:119` const fn） |
 | `WEBSHELL_MAX_SESSIONS` (`tasks/mod.rs:108`) | 8 | WebShell 同时会话上限 |
-| `WEBSHELL_SESSION_SEMAPHORE` (`tasks/mod.rs:108`) | `Semaphore(8)` | `try_acquire`，无排队；满即立即失败，且**绕过** `TASK_MAX_TIMEOUT` |
+| `WEBSHELL_SESSION_SEMAPHORE` (`tasks/mod.rs:111`) | `Semaphore(8)` | `try_acquire`，无排队；满即立即失败，且**绕过** `TASK_MAX_TIMEOUT` |
 
 ### 命令执行（`tasks/execute.rs`）
 
@@ -161,8 +161,8 @@ reload 触发点：`tasks/mod.rs` 中 EditConfig 成功后 `sleep 300ms` 再 `RE
 
 ### NTP（`ntp.rs`）
 
-- `DEFAULT_NTP_PORT=123`、`NTP_TIMEOUT=10s` (`ntp.rs:14`)。
-- `StdTimestampGen` (`ntp.rs:20`)：基于 `SystemTime`，`init()` 捕获距 UNIX_EPOCH 的 duration（错误 -> 0）。
+- `DEFAULT_NTP_PORT=123` (`ntp.rs:15`)、`NTP_TIMEOUT=10s` (`ntp.rs:17`)。
+- `StdTimestampGen` (`ntp.rs:21`)：基于 `SystemTime`，`init()` 捕获距 UNIX_EPOCH 的 duration（错误 -> 0）。
 - 启动时会对 DNS 解析出的全部 NTP 地址并发发起探测（按地址族分别 bind `0.0.0.0:0` / `[::]:0`），哪个地址先成功就采用哪个偏移；单个地址失败不会阻塞其他地址继续完成。
 - 偏移转换 `(us/1000.0).round() as i64`（**非** 整除，见陷阱）。
 
@@ -263,12 +263,12 @@ Agent 作为客户端调用/接收的 JSON-RPC（方法名由 server 定义，js
 - **维护者必须**在再次调用 `init_connections` 前 abort 之前的 handles（`multi_server.rs:68`）。`main.rs` 通过 `abort_handles` 履约；违反契约会让旧 manager 短暂存活并重连。池 replace + drop-old-map 仅是纵深防御。
 - `subscribe_to` (`multi_server.rs:600`) 返回的 `broadcast::Receiver` 只能看到订阅**之后**广播的消息；调用方必须容忍 `RecvError::Lagged`（warn+continue），且若 manager 尚未建连，receiver 可能无限空闲（需自带超时）。
 - WebShell 会话**故意**绕过 `TASK_MAX_TIMEOUT`（`tasks/mod.rs:437`），仅由 `WEBSHELL_SESSION_SEMAPHORE`（8 并发、`try_acquire` 非阻塞）约束。恶意/异常 server 发 >8 个 WebShell 会立即失败，但 8 个并发 PTY 子进程仍会跑到 WS 关闭。**切勿**把 WebShell 包进 `time::timeout`。
-- `read_capped` (`execute.rs:84`) 命中 `max_capture` 后向 `sink()` 的持续排空是 load-bearing；移除会让 OS 管道缓冲（64KiB）写满、子进程 `write()` 阻塞、`child.wait()` 永不返回，导致 60s 才超时且 head/tail 截断逻辑失效。该 60s 排空由 `EXECUTE_TIMEOUT` 兜底，并非无界。
+- `read_capped` (`execute.rs:84`，`max_capture` 在该行由 `exec_max_character` 转换而来；`read_capped` 函数本体在 `:202`，向 `sink()` 排空在 `:213`) 命中 `max_capture` 后向 `sink()` 的持续排空是 load-bearing；移除会让 OS 管道缓冲（64KiB）写满、子进程 `write()` 阻塞、`child.wait()` 永不返回，导致 60s 才超时且 head/tail 截断逻辑失效。该 60s 排空由 `EXECUTE_TIMEOUT` 兜底，并非无界。
 - `exec_max_character` (`execute.rs:43`) 名为 “character”，但比较/截断按 UTF-8 **字节**长度（`result.len()`）。多字节语言（中文 3B/char）实际字符数少于名字暗示；`is_char_boundary` 保证字符串合法。**切勿**假设按字符计数。
 - 磁盘/网络速率分母 clamp 到 `>=0.01s`（10ms）且首初始化回拨 1s（`impls.rs:145`）。动速率计算的人**必须**保留 clamp 与回拨，否则首 tick 速率会变成垃圾。
 - **切勿**把 `PROCESS_COUNT_CACHE` 从 `AtomicU32` “升级”为 `AtomicU64`（`system_impls/mod.rs:32`）—— 部分 32 位 tier-3 目标（armv5te/mipsel/powerpc/thumbv6m）没有 `AtomicU64`；`DynamicSystemData.process_count` 在读取时 u64 拓宽。
 - `DynamicDataFromGpu::new()` (`gpu.rs:90`) 用 `filter_map` 要求每个 NVML 字段都成功 —— 单字段失败会整卡丢弃；`update()`（热路径）改用字段级 `Ok(...)`，绝不丢弃已存在的 GPU，支持 vGPU 热插拔。两条路径的容错语义不同，**切勿**统一。
-- server UUID 不匹配触发 **30s 冷却**（`multi_server.rs:159`），而非传输错误的指数退避。这是故意的（通常意味着 URL/DNS/反代配错，快速重连只是噪声）。**切勿**改成快速重试。
+- server UUID 不匹配触发 **30s 冷却**（`multi_server.rs:173`，`UuidVerification::Mismatch` 分支入口在 `:167`），而非传输错误的指数退避。这是故意的（通常意味着 URL/DNS/反代配错，快速重连只是噪声）。**切勿**改成快速重试。
 - `NoCertificateVerification` (`multi_server.rs:493`) 仅在 `server.ignore_cert=true` 时接入，接受任意证书。**生产环境切勿**开启 `ignore_cert`，**切勿**在别处复用该 verifier 模式。
 - `ip_cloudflare` (`ip.rs:174`) 用 IP 字面量 URL（`1.1.1.1`、`[2606:4700:4700::1111]`）以确保 DNS 解析族与 `local_address` 绑定一致；换成 `www.cloudflare.com` 会让 DNS 选错族并破坏 v4/v6 之一。这些 anycast IP 的证书带 IP SAN。
 - TCP ping 超时硬编码 **1s**，与 TCP 系统重传对齐（`ping/tcp.rs:13`）。改它会改变测量语义（开始计入重传）。代码注释明确写**勿改**。
@@ -278,7 +278,7 @@ Agent 作为客户端调用/接收的 JSON-RPC（方法名由 server 定义，js
 - NTP 偏移由 `(us/1000.0).round() as i64` 转 ms（`ntp.rs:72`），**非**整除 —— 小负偏移整除会向零截断并扭曲 ±几十 us 的 LAN 偏移。**保留**四舍五入。
 - NTP 每进程仅获取一次（`NTP_INIT_DONE` 守卫，`main.rs:148`）。reload **故意**不重新获取以避免偏移跳变；新增重取路径必须谨慎 gating。
 - 上报循环序列化失败时**跳过本轮**（`continue`）而非发 null（`monitoring_data_report.rs:107`）—— 发 null 会欺骗 server、掩盖真实失败。**保留** skip-on-serialize-fail。
-- Unix 子进程以 `process_group(0)` 启动（`execute.rs:59`），pgid == pid，使超时时 `libc::killpg(pgid, ...)` 能回收孙进程（如 shell fork 的子进程）。移除 `process_group(0)` 会让孙进程在超时后变孤儿；非 Unix 回退 `kill_on_drop`。
+- Unix 子进程以 `process_group(0)` 启动（`execute.rs:60`，`#[cfg(unix)]` 属性在 `:59`），pgid == pid，使超时时 `libc::killpg(pgid, ...)` 能回收孙进程（如 shell fork 的子进程）。移除 `process_group(0)` 会让孙进程在超时后变孤儿；非 Unix 回退 `kill_on_drop`。
 
 ## 依赖关系
 

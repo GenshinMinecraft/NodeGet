@@ -43,7 +43,7 @@ pub fn clear_dav_handler_cache() {
     if let Some(cache) = DAV_HANDLER_CACHE.get() {
         cache
             .write()
-            .expect("DAV handler cache lock poisoned")
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clear();
     }
 }
@@ -59,7 +59,7 @@ fn get_or_create_dav_handler(bucket_name: &str, disk_path: &std::path::Path) -> 
     // Slow path: write lock
     let mut cache = dav_handler_cache()
         .write()
-        .expect("DAV handler cache lock poisoned");
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     // Double-check after acquiring write lock
     if let Some(handler) = cache.get(bucket_name) {
         return handler.clone();
@@ -238,6 +238,22 @@ async fn serve_static_file(
             );
         }
     };
+
+    // 文件大小上限：避免把超大文件全量读进内存（tokio::fs::read）导致 OOM。
+    // 超限返回 413，而不是分配 N×文件大小 的堆内存（并发放大）。
+    // 大文件应通过 WebDAV 或专用 CDN 分发，而非 HTTP 静态路由全量缓冲。
+    const MAX_STATIC_FILE_SIZE: u64 = 8 * 1024 * 1024;
+    if metadata.len() > MAX_STATIC_FILE_SIZE {
+        return build_static_error(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            format!(
+                "File too large ({} bytes, max {}); use WebDAV for large files",
+                metadata.len(),
+                MAX_STATIC_FILE_SIZE
+            ),
+            cors,
+        );
+    }
 
     // ETag = 修改时间(秒) + 字节数，弱验证器。仅用于缓存命中判断，非内容哈希。
     let etag = build_etag(&metadata);

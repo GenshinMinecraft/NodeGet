@@ -114,19 +114,23 @@ NodeGet 是本项目的基础服务接口模块，提供服务端状态查询、
 
 `total` 字段为所有表存储大小之和
 
-查询范围包含以下 11 张业务表（不含 `seaql_migrations`）:
+查询范围为**动态发现**的当前 schema 下所有用户表（排除 `seaql_migrations`）。当前版本包含以下 13 张业务表：
 
-1. `static_monitoring` - 静态监控数据表
-2. `dynamic_monitoring` - 动态监控数据表
-3. `dynamic_monitoring_summary` - 动态监控摘要表
-4. `task` - 任务数据表
-5. `token` - 令牌数据表
-6. `kv` - 键值存储表
-7. `monitoring_uuid` - Agent UUID 缓存表
-8. `crontab` - 定时任务表
-9. `crontab_result` - 定时任务结果表
-10. `js_worker` - JS Worker 表
-11. `js_result` - JS 执行结果表
+1. `crontab` - 定时任务表
+2. `crontab_result` - 定时任务结果表
+3. `db_registry` - 用户数据库注册表
+4. `dynamic_monitoring` - 动态监控数据表
+5. `dynamic_monitoring_summary` - 动态监控摘要表
+6. `js_result` - JS 执行结果表
+7. `js_worker` - JS Worker 表
+8. `kv` - 键值存储表
+9. `monitoring_uuid` - Agent UUID 缓存表
+10. `static_file` - 静态文件配置表
+11. `static_monitoring` - 静态监控数据表
+12. `task` - 任务数据表
+13. `token` - 令牌数据表
+
+> 注：表清单由 `database_storage` 运行时动态查询（PostgreSQL 走 `pg_tables`、SQLite 走 `sqlite_master`），仅排除 `seaql_migrations`。未来新增表会自动纳入返回结果，无需修改文档。上例 `total` 数值仅为示例快照。
 
 不同数据库后端的查询方式:
 

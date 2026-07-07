@@ -156,12 +156,10 @@ pub async fn report_static(
 
         debug!(target: "monitoring", agent_uuid = %static_monitoring_data.uuid, "Received static data, sending to buffer");
 
-        monitoring_buffer::get()
+        monitoring_buffer::with_buffers(|b| b.static_mon.send(in_data))
             .ok_or_else(|| {
                 NodegetError::ConfigNotFound("MonitoringBuffers not initialized".to_owned())
-            })?
-            .static_mon
-            .send(in_data);
+            })?;
 
         hash_cache.update(uuid_id, &data_hash);
 

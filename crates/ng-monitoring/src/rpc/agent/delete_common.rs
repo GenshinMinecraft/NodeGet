@@ -7,6 +7,7 @@ use crate::monitoring_uuid_cache::MonitoringUuidCache;
 use crate::query::QueryCondition;
 use ng_core::error::NodegetError;
 use ng_core::permission::data_structure::Scope;
+use ng_core::utils::MAX_QUERY_LIMIT;
 use std::collections::HashSet;
 use tracing::warn;
 
@@ -38,17 +39,16 @@ pub fn scopes_from_conditions(conditions: &[QueryCondition]) -> Vec<Scope> {
 ///
 /// - 返回值 — `(limit_count, is_last)`
 ///
-/// Limit 会被钳制到 `MAX_LIMIT`(与 `crontab_result`/`js_result`/`task.query` 对齐),
+/// Limit 会被钳制到 `MAX_QUERY_LIMIT`(与 `crontab_result`/`js_result`/`task.query` 对齐),
 /// 避免 select 出海量 id 致 `Vec<i64>` OOM。
 pub fn extract_limit_and_last(conditions: &[QueryCondition]) -> (Option<u64>, bool) {
-    const MAX_LIMIT: u64 = 10_000;
     let mut limit_count = None;
     let mut is_last = false;
 
     for cond in conditions {
         match cond {
             QueryCondition::Limit(n) => {
-                limit_count = Some(std::cmp::min(*n, MAX_LIMIT));
+                limit_count = Some(std::cmp::min(*n, MAX_QUERY_LIMIT));
             }
             QueryCondition::Last => {
                 is_last = true;

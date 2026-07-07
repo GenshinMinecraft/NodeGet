@@ -438,7 +438,7 @@ pub fn global_pool() -> &'static Arc<JsRuntimePool> {
 
 /// 初始化全局运行时池并启动周期性清理循环。
 ///
-/// 必须在服务器启动时调用一次。清理循环每隔 1 秒扫描空闲 Worker。
+/// 必须在服务器启动时调用一次。清理循环每隔 5 秒（`CLEANUP_INTERVAL_MS`）扫描空闲 Worker。
 pub fn init_global_pool() -> &'static Arc<JsRuntimePool> {
     let pool = global_pool();
 

@@ -9,7 +9,7 @@ crates/ng-task/src/
 ├── lib.rs                       # crate 根，default 暴露 types，server 暴露 rpc
 ├── types/
 │   ├── mod.rs                   # 任务数据结构（agent 安全，无 feature 门控）
-│   └── query.rs                 # 查询 DSL：TaskQueryCondition / TaskDataQuery / TaskResponseItem
+│   └── query.rs                 # 查询 DSL：TaskQueryCondition / TaskDataQuery
 └── rpc/                         # #[cfg(feature = "server")]
     ├── mod.rs                   # Rpc trait、TaskRpcImpl、TaskManager、MonitoringUuidProvider、register_task、escape_like_pattern、rpc_module
     ├── create_task.rs           # 非阻塞创建任务
@@ -83,7 +83,6 @@ crates/ng-task/src/
 |---|---|---|
 | `TaskQueryCondition` | `crates/ng-task/src/types/query.rs:9` | derive `Debug, PartialEq, Eq, Serialize, Deserialize`，`#[serde(rename_all="snake_case")]`（外部标签新类型/按形状反序列化）。变体：`TaskId(u64)`、`Uuid(uuid::Uuid)`、`TimestampFromTo(i64,i64)`、`TimestampFrom(i64)`、`TimestampTo(i64)`、`IsSuccess`、`IsFailure`、`IsRunning`、`Type(String)`、`CronSource(String)`、`Limit(u64)`、`Last`。条件之间 AND 组合 |
 | `TaskDataQuery` | `crates/ng-task/src/types/query.rs:41` | derive `Debug, PartialEq, Eq, Serialize, Deserialize`。字段 `condition: Vec<TaskQueryCondition>`。空 vec 合法（退化为 Global 作用域、全类型查询，受 `DEFAULT_LIMIT` 限制） |
-| `TaskResponseItem` | `crates/ng-task/src/types/query.rs:48` | 仅 derive `Serialize`（非 `Deserialize`，只写响应）。字段：`task_id: i64`、`uuid: String`、`cron_source: Option<String>`、`timestamp: Option<i64>`、`success: Option<bool>`、`task_event_type: Value`、`task_event_result: Option<Value>`、`error_message: Option<String>`。**注意**：此结构体已定义但 query RPC 并不序列化进它——而是直接用重命名键流式输出 `RawValue` JSON。`task_id` 在此为 `i64`，与 `TaskEvent` 的 `u64` 不一致 |
 
 ### RPC 层类型（`rpc/mod.rs`）
 
@@ -202,7 +201,6 @@ ng-task **不拥有** `task` 实体（定义于 `crates/ng-db/src/entity/task.rs
 
 - **切勿**在新增任务变体时只改一处：`TaskEventType::task_name`（`crates/ng-task/src/types/mod.rs:153`）与 `TaskEventResult::task_name`（`crates/ng-task/src/types/mod.rs:261`）是两个独立 const fn，必须手动同步；此外还要更新 `permission_field`、`validate_task_type` 的 match、以及 `query.rs`/`delete.rs` 中各 12 项的 `all_task_types` 数组。
 - **`all_task_types` 数组必须与 `TaskEventType` 同步**：`crates/ng-task/src/rpc/query.rs:42-55`（及 delete.rs:44-57）的硬编码数组当前列出 12 种任务类型，已包含 `self_update`。新增任务类型时若不同步此数组，无 Type 条件的 query/delete 会静默缺失对该类型的权限覆盖。
-- **`TaskResponseItem` 未被使用**：`crates/ng-task/src/types/query.rs:48` 定义但 query RPC 并不序列化进它（手工塑形 JSON）。`task_id` 在此为 `i64` 而 `TaskEvent` 为 `u64`——若将 query.rs 切换为使用此结构体，必须协调类型。
 - **`send_event` 用 `try_send`**：`crates/ng-task/src/rpc/mod.rs:467`——满 32 容量队列或未知 UUID 均 `Err(104)`，使 `create_task` 返回 `AgentConnectionError`（104）并回滚刚插入的行。调用方必须重试；这是有意的（防 RPC handler 挂起），但负载下可能导致任务抖动。两个错误仅能从 message 字符串区分。
 - **`set_monitoring_uuid_provider` 静默忽略二次调用**：`crates/ng-task/src/rpc/mod.rs:67` 以 `let _ = .set()` 设置，第一个 provider 永久获胜；进程内重启或二次注册会丢弃新 provider 且无错误。
 - **monitoring_uuid 登记失败被忽略**：`crates/ng-task/src/rpc/create_task.rs:107-110` 与 `create_task_blocking.rs:107-110` 以 `let _ =` 丢弃 `get_or_insert` 错误，任务照常派发——目标 agent 可能不在权威 agent 表中，影响依赖该表的其他子系统。

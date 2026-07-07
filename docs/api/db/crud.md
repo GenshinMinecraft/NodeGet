@@ -392,3 +392,24 @@ DML 返回 `0`，不是受影响的行数。
 | 102 | Permission Denied                  |
 | 103 | Database error (数据库未注册 / SQL 执行失败) |
 | 108 | Invalid input (参数格式错误)             |
+
+### ⚠️ 权限范围（SQLite 后端：等价于该 server uid 的文件系统操作）
+
+`db_exec_sql` 在**指定子库**上执行任意 SQL，**这是设计意图，不是缺陷**——授予 `Db::ExecSql` 即等于完全信任持有者操作该子库。但授权者必须明白该权限的真实 blast radius **远不止"读写该子库数据"**：
+
+**SQLite 后端下**：SQL 语句 `ATTACH DATABASE '任意路径' AS x; ...` 可在 **server 进程 uid 可写的任意文件系统路径**创建/覆盖 SQLite 文件、读取其他 `.db` 库。即：
+
+- **跨库读/写**：默认部署下主库 `nodeget.db` 与全部子库同处 `db_path` 目录，持 `Db::ExecSql(任一子库)` 者可 `ATTACH './nodeget.db'` 读取全部 `token_hash`/`password_hash`（SHA256+"NODEGET" 盐，可离线爆破），甚至 `INSERT` 已知口令哈希的后门 token。
+- **任意文件写**：在 server 可写目录投放/覆盖文件。
+- **绕过 `db_registry` 隔离与审计**：ATTACH 后的库不受命名空间约束。
+
+这与 [`nodeget::exec_sql`](../nodeget/crud.md) 的 `NodeGet::ExecSql` 风险**等同**——二者都是在 SQLite 进程上下文执行任意 SQL，ATTACH 是 SQLite 固有特性（无独立权限模型），**不是可关闭的开关**。差别仅在执行连接：`db_exec_sql` 在子库连接、`nodeget_exec_sql` 在主库连接，但 SQLite ATTACH 让二者都可达主库文件。
+
+**PostgreSQL 后端**：PG 有独立角色/权限模型，`ATTACH PARTITION` 只能挂同集群分区、`COPY`/文件访问受预定义角色约束，故此风险面在 PG 下大幅收敛。
+
+**授予建议**：
+
+- `Db::ExecSql` 应与 `NodeGet::ExecSql` **等同对待**——仅授予完全可信的运维/汇聚端，**永不**授予多租户场景下的普通用户。
+- **server 不要以 root 运行**；使用专用 uid 并严格限制可写目录，把 ATTACH 的危害物理限制在数据目录内。
+- 授予该权限前，等同评估"授予 server uid 的文件系统写权限"。
+

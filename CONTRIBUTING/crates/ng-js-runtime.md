@@ -70,10 +70,10 @@
 | `DEFAULT_MAX_HEAP_SIZE_BYTES` | 同上 | `8 MiB`。 |
 | `MAX_INLINE_DEPTH` | （`GLOBALS_JS` 内） | `10`，JS 侧 `__nodeget_inline_call` 强制，Rust 侧 `inline_depth` 透传，二者必须同步。 |
 | `RPC_BUF_SIZE` | `crates/ng-js-runtime/src/nodeget.rs:16` | `const ... : usize = 4096`，传给 `raw_json_request` 作为 jsonrpsee `raw_json_request` 内部通知/订阅流 channel 容量；不是 RPC 响应体大小上限。 |
-| `DRAIN_IO_MS` | `crates/ng-js-runtime/src/runtime_pool.rs:34` 等处引用 | `100ms`；pool 正常路径仅在 `__nodeget_fetch_used` 为真时触发，硬超时 / idle-cleanup timeout 会额外 sleep 一次；一次式执行器成功时按 fetch 标志决定，JS 执行错误或外层 timeout 时则保守地同样执行一次 drain。 |
-| Cleanup ticker 间隔 | `crates/ng-js-runtime/src/runtime_pool.rs:442` | `5_000ms`，`MissedTickBehavior::Delay`。 |
+| `DRAIN_IO_MS` | `crates/ng-js-runtime/src/runtime_pool.rs:36` 等处引用 | `100ms`；pool 正常路径仅在 `__nodeget_fetch_used` 为真时触发，硬超时 / idle-cleanup timeout 会额外 sleep 一次；一次式执行器成功时按 fetch 标志决定，JS 执行错误或外层 timeout 时则保守地同样执行一次 drain。 |
+| Cleanup ticker 间隔 | 常量 `crates/ng-js-runtime/src/runtime_pool.rs:33`（`CLEANUP_INTERVAL_MS`）；interval 构造于 `:449`，`MissedTickBehavior::Delay` 设于 `:450` | `5_000ms`，`MissedTickBehavior::Delay`。 |
 | `SyncSender` 容量 | `crates/ng-js-runtime/src/runtime_pool.rs`（`RuntimeWorkerHandle`） | `std::sync::mpsc::sync_channel(256)`。 |
-| `RUNTIME_CLEAN_TIME_NONE` | `crates/ng-js-runtime/src/runtime_pool.rs:95` | `-1`，负值 load 视为 `None`。 |
+| `RUNTIME_CLEAN_TIME_NONE` | `crates/ng-js-runtime/src/runtime_pool.rs:31` | `-1`，负值 load 视为 `None`。 |
 | Watchdog 死线扫描上限 | `crates/ng-js-runtime/src/server_runtime.rs:201` | 每 `<=50ms` 一轮扫描。 |
 | `__nodeget_clear_all_timers` 上限 | `GLOBALS_JS` | 最多 100 次迭代。 |
 | `setInterval` 最小间隔钳制 | `GLOBALS_JS` | 钳到 `>=4ms`。 |

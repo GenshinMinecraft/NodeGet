@@ -131,7 +131,7 @@ ng-token 由 `ServerPermissionChecker`（在 `serve.rs` 注册）直接消费，
 | 命名空间 | 方法 | 参数 | 所需权限 | 行为 |
 |----------|------|------|----------|------|
 | `token` | `get` | `token: String`, `supertoken: Option<String>` | 自查：自身有效凭据；管理查询：super token | 无 supertoken：把 `token` 当凭据调 `get_token`。有 supertoken：先 `check_super_token`，再把 `token` 当凭据（`get_token`），解析失败则当 key/username 调 `get_token_by_key_or_username`。返回序列化 `Token`。 |
-| `token` | `create` | `father_token: String`, `token_creation: TokenCreationRequest { username: Option<String>, password: Option<String>, timestamp_from: Option<i64>, timestamp_to: Option<i64>, version: Option<i32>, token_limit: Vec<Limit> }` | super token | 委派 `generate_and_store_token`：super 校验、配对/禁字符校验、随机 key(16)/secret(32)、hash+insert（当前忽略请求里的 `version`，固定写 `version=1`）、reload。返回 `{"key":...,"secret":...}`。 |
+| `token` | `create` | `token: String`, `token_creation: TokenCreationRequest { username: Option<String>, password: Option<String>, timestamp_from: Option<i64>, timestamp_to: Option<i64>, token_limit: Vec<Limit> }` | super token | 委派 `generate_and_store_token`：super 校验、配对/禁字符校验、随机 key(16)/secret(32)、hash+insert（`version` 固定写 `1`）、reload。返回 `{"key":...,"secret":...}`。 |
 | `token` | `delete` | `token: String`, `target_token: String` | super token | 拒绝空 target；拒绝 target 等于 super 的 key 或 username；先按 token_key 删除，回退 username；DB 过滤 `Id.ne(1)`。返回 `{"message":...,"rows_affected":N,"matched_by":"token_key\|username"}` 或 `NotFound`。 |
 | `token` | `change_password` | `token: String`, `target_token: String`, `new_password: String` | super token | `new_password` 非空且 ≥ 6 字符；经 `utils::find_target_token` 定位，置 `password_hash=hash_string(new_password)`，更新 DB，reload。返回 `{"success":true,"message":"Password changed successfully"}`。 |
 | `token` | `roll_token_secret` | `token: String`, `target_token: String` | super token | 定位目标，生成新 32 字符 secret，置 `token_hash=hash_string(new_secret)`，更新 DB，reload（旧 secret 立即失效）。返回 `{"key":token_key,"secret":new_secret}`。 |
@@ -170,7 +170,7 @@ namespace 不受 jsonrpsee 框架保护。管理类方法通常把调用方凭�
 
 - **维护者必须保持 `reload_from_models` 的更新顺序**（`cache.rs:128`）：先 `inner.by_key`/`by_username` 再 `SUPER_TOKEN_GLOBAL`。颠倒会产生权限降级窗口（过期 super 凭据经 `by_key` 通过但 `is_super=false`）。`cache.rs:130-135` 注释明确记录。
 - **切勿在锁临界区内引入新的 panic 路径**（`cache.rs:63`）。poisoned RwLock 恢复用 `e.into_inner()`，单线程 panic 不会崩溃 server，但缓存可能服务过期/不一致数据。
-- **切勿手工存储全零 hash**（`cache.rs:194`）。`build_maps` 对 hex 解码失败的行回退 `[0u8;32]`；若某 token 的 secret 摘要恰为全零，则可能用全零摘要通过认证。实际 SHA256 不会产生全零。
+- **切勿手工存储全零 hash**（`cache.rs:200`）。`build_maps` 对 hex 解码失败的行回退 `[0u8;32]`；若某 token 的 secret 摘要恰为全零，则可能用全零摘要通过认证。实际 SHA256 不会产生全零。
 - **token_limit 损坏会静默丢权限**（`cache.rs:182`）。`parse_token_limit_with_compat` 失败时记录 warning 并替换为空 `Vec`——这是有意保活，但意味着数据损坏表现为权限丧失而非错误。
 - **`check_token_limit` 是 AND 语义**（`get.rs:377`）：对 `scopes × permissions` 全笛卡尔积要求**每对**都被覆盖。传入长度不匹配切片 intending OR 语义会得到 AND 语义。
 - **仅后缀通配**（`get.rs:189`）：`wildcard_matches_pattern` 只把**尾部** `*` 当通配；`a*b` 按精确匹配，中缀 `*` 被当字面量——常见意外。

@@ -32,7 +32,8 @@ pub mod entity;
 ///
 /// `PostgreSQL` 连接池的 `drop` 需要 join 后台维护任务，耗时可达数秒。
 /// 进程退出时 OS 回收所有资源（TCP 连接、内存），无需显式析构。
-/// 若后续需要优雅关闭池，可在 `serve.rs` 退出前调用 `take_and_close_db()`。
+/// `take_and_close_db()` 提供了显式析构的入口，但当前 `serve.rs` 退出流程未调用它
+/// （依赖 OS 回收）；保留该函数供未来需要优雅关闭池时启用。
 static DB: std::sync::OnceLock<std::mem::ManuallyDrop<sea_orm::DatabaseConnection>> =
     std::sync::OnceLock::new();
 
@@ -62,6 +63,7 @@ pub fn set_db(conn: sea_orm::DatabaseConnection) {
 /// # Safety
 ///
 /// 必须确保无其他代码仍在使用 `get_db()` 返回的引用。
+#[cfg(feature = "server")]
 #[allow(dead_code)]
 pub unsafe fn take_and_close_db() {
     // SAFETY: 调用者保证无其他引用在使用中

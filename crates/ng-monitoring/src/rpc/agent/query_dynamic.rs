@@ -13,6 +13,7 @@ use ng_core::permission::data_structure::{DynamicMonitoring, Permission, Scope};
 use ng_core::permission::token_auth::TokenOrAuth;
 use ng_core::utils::error_message::anyhow_error_to_raw;
 use ng_core::utils::server_json::rename_and_fix_json;
+use ng_core::utils::{DEFAULT_MONITORING_QUERY_LIMIT, MAX_QUERY_LIMIT};
 use ng_db::entity::dynamic_monitoring;
 use ng_infra::server::RpcHelper;
 use ng_token::get::check_token_limit;
@@ -42,8 +43,6 @@ pub async fn query_dynamic(
     token: String,
     dynamic_data_query: DynamicDataQuery,
 ) -> RpcResult<Box<RawValue>> {
-    const DEFAULT_LIMIT: u64 = 10_000;
-    const MAX_LIMIT: u64 = 10_000;
     let process_logic = async {
         debug!(target: "monitoring", conditions_count = dynamic_data_query.condition.len(), fields_count = dynamic_data_query.fields.len(), "Dynamic query request received");
 
@@ -184,7 +183,7 @@ pub async fn query_dynamic(
                 }
             });
 
-        let clamped_limit = limit_count.map(|l| std::cmp::min(l, MAX_LIMIT));
+        let clamped_limit = limit_count.map(|l| std::cmp::min(l, MAX_QUERY_LIMIT));
 
         let query = if is_last {
             query
@@ -197,7 +196,7 @@ pub async fn query_dynamic(
         } else {
             query
                 .order_by(dynamic_monitoring::Column::Timestamp, Order::Asc)
-                .limit(DEFAULT_LIMIT)
+                .limit(DEFAULT_MONITORING_QUERY_LIMIT)
         };
 
         let field_mappings: Vec<(&str, &str)> = dynamic_data_query

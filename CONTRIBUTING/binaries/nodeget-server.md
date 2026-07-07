@@ -305,7 +305,7 @@ loop {
 - **维护者必须意识到 `server/src/main.rs:101` 的 Serve 分支是无限循环、无退出条件、无重试上限、无 backoff**。`serve::run` 仅在 shutdown 或 reload 信号时返回；一个不触发 reload 的真正致命错误会让循环空转，每轮重新解析配置。
 - **切勿假设配置热重载解析失败会停服**：`server/src/main.rs:117`（及 `:126` 的 `set_server_config` 失败）失败时 `continue`，立即以**旧** config 再次 `serve::run`。若坏配置持续存在，会无延迟热循环。
 - **`server/src/rpc_nodeget.rs:356` 的 `self_update` 是远程代码执行路径**：URL 由用户提供的 `tag` 派生，下载并替换运行中的 server 可执行文件再 exec 新进程。虽 super-token 守卫，下载源（`ng_core::self_update::get_server_url`）与签名模型必须可信；release 源被攻破或下载链路上的 DNS/网络 MITM 即等于攻破 server。
-- **`server/src/rpc_nodeget.rs:198` 的 `exec_sql` 是完全信任 RPC**，在主 DB 上执行任意 SQL（委托 `ng_db::rpc::nodeget::exec_sql`）；SQLite 下 `ATTACH DATABASE` 升级为 server uid 下的任意 FS 读写。CLAUDE.md 文档化为**有意为之**；**切勿**放宽其权限，并在最小权限 uid 下运行 server。
+- **`server/src/rpc_nodeget.rs:485` 的 `exec_sql` 是完全信任 RPC**（trait 声明在 `:93`），在主 DB 上执行任意 SQL（委托 `ng_db::rpc::nodeget::exec_sql`）；SQLite 下 `ATTACH DATABASE` 升级为 server uid 下的任意 FS 读写。CLAUDE.md 文档化为**有意为之**；**切勿**放宽其权限，并在最小权限 uid 下运行 server。
 - **`server/src/subcommands/serve.rs:422`（TLS 分支）与 `:474`（明文分支）的 `select` 两侧都对 `serve_future` 结果 `unwrap()`**：若 `axum::serve` 中途返回 Err（如监听器失败），server 进程在 shutdown 期间 `panic`，外层 `main` 循环随后重启。属刻意 fail-fast，但确是硬 panic。
 - **`server/src/subcommands/serve.rs:121`：`RpcTimingMiddleware` 硬编码为 `tracing::Level::TRACE`**。RPC 计时日志在 TRACE 级别发出，运维若要看到须把 `rpc` target 设为 `trace`（或全局 `trace`），日志量很大，预期容易错位。
 - **`server/src/subcommands/serve.rs:402`：`config.ws_listener` 用 `parse().unwrap_or_else(panic)` 解析**。`config.toml` 中监听地址格式错误会在启动时直接 panic，无回退。

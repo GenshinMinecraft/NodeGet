@@ -129,7 +129,8 @@ impl RpcServer for NodegetServerRpcImpl {
     async fn version(&self) -> Value {
         let span = tracing::info_span!(target: "server", "nodeget-server::version");
         async {
-            let response = serde_json::to_value(NodeGetVersion::get()).unwrap();
+            let response = serde_json::to_value(NodeGetVersion::get())
+                .expect("NodeGetVersion serialization is infallible (all fields are String)");
             tracing::debug!(target: "server", response = %response, "request completed");
             response
         }

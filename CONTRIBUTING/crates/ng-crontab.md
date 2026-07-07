@@ -75,7 +75,7 @@ crates/ng-crontab/src/
 
 - `CrontabResultQueryCondition` (`query.rs:12`)：snake_case；条件 AND 组合。
 - `CrontabResultDataQuery` (`query.rs:37`)：`{ condition: Vec<...> }`。
-- `CrontabResultResponseItem` (`query.rs:44`)：**仅** `Serialize`；**不**用于 RPC 响应（见陷阱）。
+- `CrontabResult` (`result.rs`)：手写 struct（`Debug, Clone`，**不** Serialize），DB 行镜像；**不**用于 RPC 响应（见陷阱）。
 
 ### `server_cron.rs`
 
@@ -132,7 +132,7 @@ crates/ng-crontab/src/
 
 ### crontab-result query 直接返回 SeaORM Model
 
-`crontab_result.query` (`query.rs:122`) 经 `serde_json::to_raw_value` 直接序列化 `Vec<crontab_result::Model>`。`query.rs::CrontabResultResponseItem` 与 `result.rs::CrontabResult` **不**用于 RPC 响应——它们是文档/占位类型。响应字段名来自 SeaORM Model（entity 生成时 `serde both`）。
+`crontab_result.query` (`query.rs:122`) 经 `serde_json::to_raw_value` 直接序列化 `Vec<crontab_result::Model>`。`result.rs::CrontabResult` **不**用于 RPC 响应——它是手写 struct（DB 行镜像，仅 `Debug, Clone`），非 SeaORM Model。响应字段名来自 SeaORM Model（entity 生成时 `serde both`）。
 
 ### Tracing target 与 span
 
@@ -177,7 +177,7 @@ crates/ng-crontab/src/
 ## Crate 内部约定
 
 - **Feature 门控**：`default = []` 仅暴露类型（`Cron`、`CronType`、`AgentCronType`、`ServerCronType`、`CrontabResult`、query DSL）；`server` feature 引入 cache/rpc/server_cron/task 模块。
-- **Serde**：`cron_type.rs` 中的共享类型与 `query.rs` 里的 `CrontabResultQueryCondition` 使用 `#[serde(rename_all = "snake_case")]`；`CrontabResultDataQuery` / `CrontabResultResponseItem` 没有该属性。
+- **Serde**：`cron_type.rs` 中的共享类型与 `query.rs` 里的 `CrontabResultQueryCondition` 使用 `#[serde(rename_all = "snake_case")]`；`CrontabResultDataQuery` 没有该属性。
 - **Logging target**：领域日志主要见于 `crontab` 与 `crontab_result`；`crontab_cache` 仅用于锁 poison 恢复；基础设施层还会出现 `cache`（全局缓存 init/reload）与 `rpc`（`rpc_exec!`）target。
 - **中文**：注释与日志/result 消息（如 `'任务下发成功'`、`'定时任务_1'`）含中文；`crontab_result.message` 嵌入中文。
 - **RPC 风格**：所有方法返回 `RpcResult<Box<RawValue>>`；一律 `#[rpc(server, namespace = "...")]` + `#[method(name = "...")]`；业务逻辑包在 `rpc_exec!`（来自 ng-infra）。
@@ -193,16 +193,16 @@ crates/ng-crontab/src/
 - **维护者必须**用 `CachedCrontab.cron_type` 读 cron_type，**切勿**读 `CachedCrontab.model.cron_type`——后者在 `parse_one` 中被 `std::mem::take` 掏空为 null（`crates/ng-crontab/src/cache.rs:137`）。
 - **切勿**假设 `insert_many` 在非串行后端返回连续 id：`crontab_task` 依赖 `base_id = last_insert_id - (count-1)`，非连续 id（序列间隙、trigger、副本）会使下发的 `task_id` 错误（`crates/ng-crontab/src/task.rs:159`）。
 - **注意** `process_crontab` 在 spawn 执行**之前**批量更新所有 due job 的 `last_run_time`；若 job panic 或在 UPDATE 与完成之间进程崩溃，该次触发被标记为已运行但无 `CrontabResult`，**静默丢失**，无回滚（`crates/ng-crontab/src/server_cron.rs:186`）。
-- **注意** 若 `last_run_time` 批量 UPDATE 失败（DB error），代码只 log、不更新 override map，仍照常 spawn job；这会导致每个 tick 重复触发（`schedule.after(last_run).next()` 持续返回过去时间），形成重复下发风暴（`crates/ng-crontab/src/server_cron.rs:242`）。
-- **注意** Agent 类型 cron 在调度层是 fire-and-forget：`crontab_task` 仅依据 `send_event`（channel 入队）是否成功记录 success，不反映 agent 是否真正执行；`CrontabResult.success` 含义是「已入队」而非「已运行」（`crates/ng-crontab/src/server_cron.rs:318`）。
+- **注意** 若 `last_run_time` 批量 UPDATE 失败（DB error），代码在 `Err` 分支**仍推进内存覆盖映射**（`cache.update_last_run_time`），且**照常 spawn job**——故即便 DB 未更新，下次 tick 因 cache 优先级（`get_last_run_time` 先读覆盖映射）**不会重触发**，避免重复下发风暴（`crates/ng-crontab/src/server_cron.rs:270`）。代价是 DB 故障期间内存与 DB 短暂不一致（DB 恢复后下次成功的 UPDATE 持久化）；且若进程在 UPDATE 与内存更新之间崩溃，该次触发会静默丢失。
+- **注意** Agent 类型 cron 在调度层是 fire-and-forget：`crontab_task` 仅依据 `send_event`（channel 入队）是否成功记录 success，不反映 agent 是否真正执行；`CrontabResult.success` 含义是「已入队」而非「已运行」（`crates/ng-crontab/src/task.rs:174`，`send_event` 返回结果决定 success 于 `:200`/`:221`）。
 - **注意** `init_crontab_worker` 无关闭句柄：`CRONTAB_WORKER_STARTED` 是不可重置的 `OnceLock<()>`，spawn 的任务带无 cancellation token 地永久循环；除结束进程外无法停止调度器（`crates/ng-crontab/src/server_cron.rs:128`）。
-- **注意** 文档中的 `CrontabResultResponseItem`（`query.rs:44`）与 `result.rs::CrontabResult` **并非** `crontab-result.query` 的返回类型；实际响应是 SeaORM `crontab_result::Model` 的裸序列化，字段名以 entity 序列化为准（`crates/ng-crontab/src/rpc/crontab_result/query.rs:122`）。
+- **注意** `result.rs::CrontabResult`（手写 struct，DB 行镜像）**并非** `crontab-result.query` 的返回类型；实际响应是 SeaORM `crontab_result::Model` 的裸序列化，字段名以 entity 序列化为准（`crates/ng-crontab/src/rpc/crontab_result/query.rs:122`）。
 - **注意** 空 UUID 列表的 Agent cron 写权限降级为仅 Global `Crontab::Write`（无 `Task::Create`），等同空操作下发但权限语义更弱；改动 `Task::Create` 校验须记得此空列表特例（`crates/ng-crontab/src/rpc/crontab/auth.rs:93`）。
-- **注意** `edit` 同时对**原** cron_type scope 与**新** cron_type scope 做写权限校验；用户编辑一个已无权限的 agent 目标 cron 会被拒（即使新配置不指向那些 agent）——这是设计行为，易被误诊为权限 bug（`crates/ng-crontab/src/rpc/crontab/edit.rs:57`）。
+- **注意** `edit` 同时对**原** cron_type scope 与**新** cron_type scope 做写权限校验；用户编辑一个已无权限的 agent 目标 cron 会被拒（即使新配置不指向那些 agent）——这是设计行为，易被误诊为权限 bug（`crates/ng-crontab/src/rpc/crontab/edit.rs:58`）。
 - **注意** `delete` 存在冗余双重查找：先 find 做权限校验，`delete_crontab_by_name` 又自行 `delete_many WHERE name=`；两步间的 race 可使第二步删 0 行并返回 NotFound。`set_enable` 的 find+update 同样非原子（`crates/ng-crontab/src/rpc/crontab/delete.rs:63`）。
 - **注意** `validate_name` 仅在 RPC 层（create/edit/delete/set_enable）应用；底层 `delete_crontab_by_name`/`set_crontab_enable_by_name` **不**校验 name，直接传给 SQL filter。直接内部调用者可能注入含 `/` 或控制字符的 name——路径安全不变量依赖始终经 RPC（`crates/ng-crontab/src/server_cron.rs:41`）。
-- **注意** `crontab.get` 中，仅有 AgentUuid scope 的 `Crontab::Read`（无 Global）的 token 看不到任何 Server 类型 job（`filter_entries_by_token` 在 `!has_global` 时对 Server 项返回 false）；无 Global scope 的 token 持有者会发现 Server cron 完全不可见（`crates/ng-crontab/src/rpc/crontab/get.rs:83`）。
-- **注意** `cron_name=None` 的 CrontabResult delete 仅校验通配 `Delete("*")`；无 CronName 过滤的查询若不具备全局通配删除权限即被拒——无 fallback 到具体名权限（`crates/ng-crontab/src/rpc/crontab_result/auth.rs:119`）。
+- **注意** `crontab.get` 中，仅有 AgentUuid scope 的 `Crontab::Read`（无 Global）的 token 看不到任何 Server 类型 job（`filter_entries_by_token` 在 `!has_global` 时对 Server 项返回 false）；无 Global scope 的 token 持有者会发现 Server cron 完全不可见（`crates/ng-crontab/src/rpc/crontab/get.rs:169`）。
+- **注意** `cron_name=None` 的 CrontabResult delete 仅校验通配 `Delete("*")`；无 CronName 过滤的查询若不具备全局通配删除权限即被拒——无 fallback 到具体名权限（`crates/ng-crontab/src/rpc/crontab_result/auth.rs:102`，`if let Some(name) = cron_name` 分支决定是否跳过具体名校验）。
 
 ## 依赖关系
 

@@ -16,7 +16,7 @@ outline: deep
 
 - nodeget-agent: 监控 Agent
 - nodeget-server: 服务端，提供 API
-- nodeget-lib: 用于存放公共结构体、以及一些 utils 代码
+- crates/ng-*（多个 crate）：存放公共结构体、utils 及各业务模块（如 ng-core、ng-db、ng-token 等）
 
 目前还是传统 Client / Server 架构
 

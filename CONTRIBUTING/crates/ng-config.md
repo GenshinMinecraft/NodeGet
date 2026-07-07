@@ -58,7 +58,7 @@ crates/ng-config/src/
 
 | 类型 | 行为 |
 |------|------|
-| `ServerConfig` / `DatabaseConfig` / `LoggingConfig` / `MonitoringBufferConfig` / `AgentConfig` / `Server`(agent) / `IpProvider` | serde 配置 DTO / enum，统一支持 `Serialize` / `Deserialize` / `Clone`；多数类型同时 `derive(Debug)`，例外：agent 的 `Server` 仅 `#[derive(Serialize, Deserialize, Clone)]` + 手写 `Debug`（隐藏 token）；`IpProvider` 额外 `derive(Copy)`。`DatabaseConfig.database_url` 与 `ServerConfig.ws_listener` 为必填，其余皆 `Option<T>`。`IpProvider` 序列化为小写（`"ipinfo"` / `"cloudflare"`） |
+| `ServerConfig` / `DatabaseConfig` / `LoggingConfig` / `MonitoringBufferConfig` / `AgentConfig` / `Server`(agent) / `IpProvider` | serde 配置 DTO / enum，统一支持 `Serialize` / `Deserialize` / `Clone`；多数类型同时 `derive(Debug)`，例外：agent 的 `Server` 仅 `#[derive(Serialize, Deserialize, Clone)]` + 手写 `Debug`（隐藏 token）；`IpProvider` 额外 `derive(Copy)`。**必填（非 `Option`）字段**：`ServerConfig.server_uuid: Uuid`、`ServerConfig.ws_listener: String`、`ServerConfig.database: DatabaseConfig`（嵌套，其内 `database_url: String` 亦必填）、`AgentConfig.agent_uuid: Uuid`、agent `Server` 的 `name`/`server_uuid`/`token`/`ws_url`；其余配置旋钮为 `Option<T>`。`IpProvider` 序列化为小写（`"ipinfo"` / `"cloudflare"`） |
 
 ## 关键类型与常量
 
@@ -88,7 +88,7 @@ crates/ng-config/src/
 
 ### auto_gen UUID 工具（`config/mod.rs`）
 
-- `deserialize_uuid_or_auto` (`crates/ng-config/src/config/mod.rs:18`)：`pub fn deserialize_uuid_or_auto<'de, D>(deserializer: D) -> Result<Uuid, D::Error> where D: Deserializer<'de>`。先按 `String` 反序列化；若大小写不敏感（`eq_ignore_ascii_case`）等于 `"auto_gen"` 则返回 `Err(custom)`——`auto_gen` 不允许经 serde 往返，必须先被 `get_and_parse_config` 替换；否则 `Uuid::parse_str`。
+- `deserialize_uuid_or_auto` (`crates/ng-config/src/config/mod.rs:18`)：`pub(crate) fn deserialize_uuid_or_auto<'de, D>(deserializer: D) -> Result<Uuid, D::Error> where D: Deserializer<'de>`。先按 `String` 反序列化；若大小写不敏感（`eq_ignore_ascii_case`）等于 `"auto_gen"` 则返回 `Err(custom)`——`auto_gen` 不允许经 serde 往返，必须先被 `get_and_parse_config` 替换；否则 `Uuid::parse_str`。
 - `replace_auto_gen_uuid` (`crates/ng-config/src/config/mod.rs:42`)：`pub(crate) fn replace_auto_gen_uuid(content: &str, key: &str, uuid: &str) -> String`。逐行 TOML 文本改写器：跳过 `#` 注释与空行；对每行定位 key 边界（至 `=` 或空白前），要求 `key_end == key.len()` 且 key 比较大小写不敏感；在原始行中定位 `=`，要求值以 ASCII 引号（`'` 或 `"`）起始，检查后续 8 字符（`.get(..8)` 避免非 ASCII 边界 panic）大小写不敏感等于 `"auto_gen"`，然后重构 `before + quote + new_uuid + after_value`。其余内容原样保留；每行追加 `'\n'`。
 
 ## 内部机制
@@ -128,7 +128,7 @@ crates/ng-config/src/
 
 ## Crate 内部约定
 
-- **严格 clippy**：`#![warn(all, pedantic, nursery)]`，全局 allow cast lints（`cast_sign_loss`、`cast_precision_loss`、`cast_possible_truncation`）、`similar_names`、`doc_markdown`（`crates/ng-config/src/lib.rs:1-8`）。
+- **严格 clippy**：`#![warn(clippy::all, clippy::pedantic, clippy::nursery)]`，全局 allow `clippy::cast_sign_loss`、`clippy::cast_precision_loss`、`clippy::cast_possible_truncation`、`clippy::similar_names`、`clippy::doc_markdown`（`crates/ng-config/src/lib.rs:1-7`）。
 - **中文文档注释**：rustdoc 与行内注释统一中文，符合 NodeGet 全局约定。
 - **Default-None Option 模式**：所有配置旋钮为 `Option<T>`，使仅含必填字段的 TOML 即可解析；消费者调 `*_or_default()` 辅助物化有效值（`crates/ng-config/src/config/agent.rs:170-217`）。
 - **Feature 门控**：`default = []` 仅暴露类型/解析器（agent 安全依赖）；`server` feature 门控 `server_rpc`（RPC + 鉴权副作用）（`crates/ng-config/src/lib.rs:26-27`）。
