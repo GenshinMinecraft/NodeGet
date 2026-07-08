@@ -523,9 +523,16 @@ impl rustls::client::danger::ServerCertVerifier for NoCertificateVerification {
     }
 
     fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-        rustls::crypto::aws_lc_rs::default_provider()
-            .signature_verification_algorithms
-            .supported_schemes()
+        // aws_lc_rs 的 supported_schemes 是编译期固定的静态算法集，缓存避免每次调用重建 Vec。
+        // 见 REVIEW L15。
+        static SCHEMES: std::sync::OnceLock<Vec<rustls::SignatureScheme>> = std::sync::OnceLock::new();
+        SCHEMES
+            .get_or_init(|| {
+                rustls::crypto::aws_lc_rs::default_provider()
+                    .signature_verification_algorithms
+                    .supported_schemes()
+            })
+            .clone()
     }
 }
 

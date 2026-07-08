@@ -39,14 +39,14 @@ pub async fn get_database_type(token: String) -> RpcResult<Box<RawValue>> {
             .check_token_limit(
                 &token_or_auth,
                 &[Scope::Global],
-                &[Permission::NodeGet(NodeGetPermission::ExecSql)],
+                &[Permission::NodeGet(NodeGetPermission::GetDatabaseType)],
             )
             .await?;
 
         if !is_allowed {
             warn!(target: "nodeget", token_key = tk, username = un, "get_database_type permission denied");
             return Err(NodegetError::PermissionDenied(
-                "Permission Denied: missing nodeget.exec_sql permission".to_owned(),
+                "Permission Denied: missing nodeget.get_database_type permission".to_owned(),
             )
             .into());
         }

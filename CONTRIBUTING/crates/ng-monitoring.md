@@ -105,7 +105,7 @@ crates/ng-monitoring/src/
 
 | 项 | 行 | 说明 |
 |---|---|---|
-| `DEFAULT_FLUSH_INTERVAL_MS` / `DEFAULT_MAX_BATCH_SIZE` / `DEFAULT_CHANNEL_CAPACITY` | `monitoring_buffer.rs:25` | `u64 = 500` / `1000` / `10000`；`MonitoringBufferConfig` 字段为 `None` 时使用。 |
+| `DEFAULT_FLUSH_INTERVAL_MS` / `DEFAULT_MAX_BATCH_SIZE` / `DEFAULT_CHANNEL_CAPACITY` | `monitoring_buffer.rs:24-28` | `u64 = 500` / `1000` / `10000`；`MonitoringBufferConfig` 字段为 `None` 时使用。 |
 | `BUFFERS` | `monitoring_buffer.rs:34` | `static OnceLock<MonitoringBuffers>`，全局单例。 |
 | `FLUSH_HANDLES` | `monitoring_buffer.rs:37` | `static Mutex<Option<[JoinHandle<()>;3]>>`；`unwrap()` 在中毒时 panic（已文档化）。 |
 | `MonitoringBuffers` | `monitoring_buffer.rs:40` | `{ static_mon, dynamic_mon, dynamic_summary }` 全为 `BufferSender<…ActiveModel>`。 |

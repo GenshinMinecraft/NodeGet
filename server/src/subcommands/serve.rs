@@ -173,7 +173,7 @@ pub async fn run(config: &ServerConfig) {
                                     .expect("Failed to build HTML response");
                             };
                             if let Some(model) = cache.get_http_root()
-                                && model.enable != Some(false)
+                                && model.enable
                             {
                                 let path = req.uri().path().to_owned();
                                 let method = req.method().clone();
@@ -240,7 +240,7 @@ pub async fn run(config: &ServerConfig) {
                                     .expect("Failed to build HTML response");
                             };
                             if let Some(model) = cache.get_http_root()
-                                && model.enable != Some(false)
+                                && model.enable
                             {
                                 let path = req.uri().path().to_owned();
                                 let method = req.method().clone();
@@ -442,10 +442,11 @@ pub async fn run(config: &ServerConfig) {
                     .expect("DbRegistryManager not initialized at shutdown")
                     .shutdown()
                     .await;
-                let stop_handle = stop_handle.clone();
-                tokio::spawn(async move {
-                    let _ = tokio::time::timeout(std::time::Duration::from_secs(5), stop_handle.shutdown()).await;
-                });
+                // inline await stop_handle.shutdown()（与 stop 分支一致），而非 detached spawn。
+                // detached 会让旧 RPC handler 继续执行 ≤5s，与重新进入 run() 后重建的
+                // 全局缓存（TokenCache/MonitoringUuidCache/StaticCache 等）并发共享——
+                // inline 等待 drain 完成后再返回，消除该竞态窗口。
+                let _ = tokio::time::timeout(std::time::Duration::from_secs(5), stop_handle.shutdown()).await;
                 #[cfg(not(target_os = "windows"))]
                 if let Some(task) = unix_server_task.take() {
                     task.abort();
@@ -493,10 +494,10 @@ pub async fn run(config: &ServerConfig) {
                     .expect("DbRegistryManager not initialized at shutdown")
                     .shutdown()
                     .await;
-                let stop_handle = stop_handle.clone();
-                tokio::spawn(async move {
-                    let _ = tokio::time::timeout(std::time::Duration::from_secs(5), stop_handle.shutdown()).await;
-                });
+                // inline await stop_handle.shutdown()（与 stop 分支一致），而非 detached spawn。
+                // detached 会让旧 RPC handler 继续执行 ≤5s，与重新进入 run() 后重建的
+                // 全局缓存并发共享——inline 等待 drain 完成后再返回，消除该竞态窗口。
+                let _ = tokio::time::timeout(std::time::Duration::from_secs(5), stop_handle.shutdown()).await;
                 #[cfg(not(target_os = "windows"))]
                 if let Some(task) = unix_server_task.take() {
                     task.abort();

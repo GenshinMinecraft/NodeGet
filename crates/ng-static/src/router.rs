@@ -27,6 +27,13 @@ use tracing::{debug, error, info, warn};
 use crate::cache::StaticCache;
 use crate::ops::{get_static_path, resolve_safe_file_path};
 
+/// 静态文件单次读取/响应的大小上限（8 MiB）。
+///
+/// HTTP 静态路由（`serve_static_file`）与 RPC `static-bucket-file.read` 共用此上限，
+/// 避免超大文件被全量 slurp 进内存（+ base64 ~1.33x 膨胀）导致 OOM。
+/// 大文件应经 WebDAV 或专用 CDN 分发，而非全量缓冲路径。
+pub(crate) const MAX_STATIC_FILE_SIZE: u64 = 8 * 1024 * 1024;
+
 /// Global cache of DavHandler instances keyed by bucket name.
 /// Avoids re-allocating LocalFs, FakeLs, and DavHandler config on every WebDAV request.
 static DAV_HANDLER_CACHE: OnceLock<RwLock<HashMap<String, DavHandler>>> = OnceLock::new();
@@ -91,8 +98,8 @@ pub fn router() -> axum::Router {
                     let Some(model) = cache.get_by_name(&name) else {
                         return build_http_error(StatusCode::NOT_FOUND, "Static not found");
                     };
-                    // enable == Some(false) 视为不存在，返回 404
-                    if model.enable != Some(false) {
+                    // enable == false 视为不存在，返回 404（enable 列已 NOT NULL，见 L33）
+                    if model.enable {
                         if req.method() == axum::http::Method::OPTIONS && model.cors {
                             return axum::http::Response::builder()
                                 .status(StatusCode::NO_CONTENT)
@@ -122,8 +129,8 @@ pub fn router() -> axum::Router {
                     let Some(model) = cache.get_by_name(&name) else {
                         return build_http_error(StatusCode::NOT_FOUND, "Static not found");
                     };
-                    // enable == Some(false) 视为不存在，返回 404
-                    if model.enable != Some(false) {
+                    // enable == false 视为不存在，返回 404（enable 列已 NOT NULL，见 L33）
+                    if model.enable {
                         // 处理 OPTIONS 预检请求
                         if req.method() == axum::http::Method::OPTIONS && model.cors {
                             return axum::http::Response::builder()
@@ -242,7 +249,7 @@ async fn serve_static_file(
     // 文件大小上限：避免把超大文件全量读进内存（tokio::fs::read）导致 OOM。
     // 超限返回 413，而不是分配 N×文件大小 的堆内存（并发放大）。
     // 大文件应通过 WebDAV 或专用 CDN 分发，而非 HTTP 静态路由全量缓冲。
-    const MAX_STATIC_FILE_SIZE: u64 = 8 * 1024 * 1024;
+    // 上限值统一于模块级 `MAX_STATIC_FILE_SIZE`，与 RPC `static-bucket-file.read` 对齐。
     if metadata.len() > MAX_STATIC_FILE_SIZE {
         return build_static_error(
             StatusCode::PAYLOAD_TOO_LARGE,
@@ -379,9 +386,9 @@ async fn static_webdav_handler(req: axum::extract::Request) -> axum::response::R
         warn!(target: "webdav", method = %method, uri = %uri_path, bucket = %name, "bucket not found");
         return build_webdav_error(StatusCode::NOT_FOUND, "Static bucket not found");
     };
-    // 与 HTTP GET 路径一致：enable == Some(false) 视为桶已下线，拒绝访问。
+    // 与 HTTP GET 路径一致：enable == false 视为桶已下线，拒绝访问（enable 列已 NOT NULL，见 L33）。
     // 否则会出现「HTTP 已 404 但 WebDAV 仍开放读写删」的访问控制不一致。
-    if model.enable == Some(false) {
+    if !model.enable {
         debug!(target: "webdav", method = %method, uri = %uri_path, bucket = %name, "bucket disabled, treating as not found");
         return build_webdav_error(StatusCode::NOT_FOUND, "Static bucket not found");
     }
@@ -479,7 +486,7 @@ async fn static_webdav_handler(req: axum::extract::Request) -> axum::response::R
 
     // 5. Serve via WebDAV
     let static_path = get_static_path();
-    let disk_path = std::path::PathBuf::from(&static_path).join(&model.path);
+    let disk_path = std::path::PathBuf::from(&*static_path).join(&model.path);
 
     info!(target: "webdav", bucket = %name, username = %username, disk_path = %disk_path.display(), method = %method, "serving webdav request");
 

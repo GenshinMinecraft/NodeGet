@@ -14,6 +14,7 @@ use jsonrpsee::core::RpcResult;
 use ng_core::error::NodegetError;
 use ng_core::permission::data_structure::{NodeGet as NodeGetPermission, Permission, Scope};
 use ng_core::permission::token_auth::TokenOrAuth;
+use ng_core::utils::EXEC_SQL_RESULT_TRUNCATE_LIMIT;
 use sea_orm::{ConnectionTrait, Statement};
 use serde_json::Value;
 use serde_json::value::RawValue;
@@ -90,9 +91,9 @@ pub async fn exec_sql(
 
         let mut rows = db.query_all_raw(stmt).await?;
         let total_count = rows.len() as u64;
-        let truncated = rows.len() > 10_000;
+        let truncated = rows.len() > EXEC_SQL_RESULT_TRUNCATE_LIMIT;
         if truncated {
-            rows.truncate(10_000);
+            rows.truncate(EXEC_SQL_RESULT_TRUNCATE_LIMIT);
         }
         let json_rows: Vec<Value> = rows.iter().map(row_to_json).collect();
 

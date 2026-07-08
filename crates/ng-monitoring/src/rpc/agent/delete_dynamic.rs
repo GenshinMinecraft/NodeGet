@@ -6,7 +6,8 @@
 use crate::query::QueryCondition;
 use crate::rpc::agent::AgentRpcImpl;
 use crate::rpc::agent::delete_common::{
-    ResolvedCondition, extract_limit_and_last, resolve_conditions, scopes_from_conditions,
+    apply_resolved_conditions, extract_limit_and_last, resolve_conditions,
+    scopes_from_conditions,
 };
 use jsonrpsee::core::RpcResult;
 use ng_core::error::NodegetError;
@@ -67,40 +68,13 @@ pub async fn delete_dynamic(
         debug!(target: "monitoring", ?limit_count, is_last, "delete_dynamic: executing delete");
 
         let rows_affected = if is_last || limit_count.is_some() {
-            let mut query = dynamic_monitoring::Entity::find();
-            for cond in &resolved_conditions {
-                match cond {
-                    ResolvedCondition::UuidId(uuid_id) => {
-                        query = query.filter(dynamic_monitoring::Column::UuidId.eq(*uuid_id));
-                    }
-                    ResolvedCondition::TimestampFromTo(start, end) => {
-                        query = query.filter(
-                            dynamic_monitoring::Column::Timestamp
-                                .gte(*start)
-                                .and(dynamic_monitoring::Column::Timestamp.lte(*end)),
-                        );
-                    }
-                    ResolvedCondition::TimestampFrom(start) => {
-                        query = query.filter(dynamic_monitoring::Column::Timestamp.gte(*start));
-                    }
-                    ResolvedCondition::TimestampTo(end) => {
-                        query = query.filter(dynamic_monitoring::Column::Timestamp.lte(*end));
-                    }
-                    ResolvedCondition::StorageTimeFromTo(start, end) => {
-                        query = query.filter(
-                            dynamic_monitoring::Column::StorageTime
-                                .gte(*start)
-                                .and(dynamic_monitoring::Column::StorageTime.lte(*end)),
-                        );
-                    }
-                    ResolvedCondition::StorageTimeFrom(start) => {
-                        query = query.filter(dynamic_monitoring::Column::StorageTime.gte(*start));
-                    }
-                    ResolvedCondition::StorageTimeTo(end) => {
-                        query = query.filter(dynamic_monitoring::Column::StorageTime.lte(*end));
-                    }
-                }
-            }
+            let query = apply_resolved_conditions::<dynamic_monitoring::Entity, _>(
+                dynamic_monitoring::Entity::find(),
+                &resolved_conditions,
+                dynamic_monitoring::Column::UuidId,
+                dynamic_monitoring::Column::Timestamp,
+                dynamic_monitoring::Column::StorageTime,
+            );
 
             let limit = if is_last { 1 } else { limit_count.unwrap_or(0) };
             let ids: Vec<i64> = query
@@ -132,40 +106,13 @@ pub async fn delete_dynamic(
                     .rows_affected
             }
         } else {
-            let mut query = dynamic_monitoring::Entity::delete_many();
-            for cond in &resolved_conditions {
-                match cond {
-                    ResolvedCondition::UuidId(uuid_id) => {
-                        query = query.filter(dynamic_monitoring::Column::UuidId.eq(*uuid_id));
-                    }
-                    ResolvedCondition::TimestampFromTo(start, end) => {
-                        query = query.filter(
-                            dynamic_monitoring::Column::Timestamp
-                                .gte(*start)
-                                .and(dynamic_monitoring::Column::Timestamp.lte(*end)),
-                        );
-                    }
-                    ResolvedCondition::TimestampFrom(start) => {
-                        query = query.filter(dynamic_monitoring::Column::Timestamp.gte(*start));
-                    }
-                    ResolvedCondition::TimestampTo(end) => {
-                        query = query.filter(dynamic_monitoring::Column::Timestamp.lte(*end));
-                    }
-                    ResolvedCondition::StorageTimeFromTo(start, end) => {
-                        query = query.filter(
-                            dynamic_monitoring::Column::StorageTime
-                                .gte(*start)
-                                .and(dynamic_monitoring::Column::StorageTime.lte(*end)),
-                        );
-                    }
-                    ResolvedCondition::StorageTimeFrom(start) => {
-                        query = query.filter(dynamic_monitoring::Column::StorageTime.gte(*start));
-                    }
-                    ResolvedCondition::StorageTimeTo(end) => {
-                        query = query.filter(dynamic_monitoring::Column::StorageTime.lte(*end));
-                    }
-                }
-            }
+            let query = apply_resolved_conditions::<dynamic_monitoring::Entity, _>(
+                dynamic_monitoring::Entity::delete_many(),
+                &resolved_conditions,
+                dynamic_monitoring::Column::UuidId,
+                dynamic_monitoring::Column::Timestamp,
+                dynamic_monitoring::Column::StorageTime,
+            );
             query
                 .exec(db)
                 .await

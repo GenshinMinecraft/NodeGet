@@ -72,8 +72,8 @@ const res = await execSql(token,
 
 ```javascript
 const { data: dbType } = await getDatabaseType(token);
-// dbType: "sqlite" | "postgres"
-// 注：若底层数据库为其他类型可能返回 "mysql" 或 "unknown"
+// dbType: "sqlite" | "postgres" | "mysql" | "unknown"
+// 注：mysql 为理论支持但非默认配置；数据库类型无法识别时返回 "unknown"
 ```
 
 ### runtimeCtx（handler 第三参数）

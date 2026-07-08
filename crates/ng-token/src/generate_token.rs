@@ -82,6 +82,19 @@ pub async fn generate_and_store_token(
         .into());
     }
 
+    // password 同样不能含 `:` / `|`：`username|password` 中若 password 含 `:`，
+    // TokenOrAuth::from_full_token 会因冒号优先而把 `username|password前段` 误判为
+    // Token 模式（token_key），导致认证失败（fail-safe，非 bypass，但用户无法登录）。
+    // 见 REVIEW L27。
+    if let Some(ref pw) = password
+        && (pw.contains(':') || pw.contains('|'))
+    {
+        return Err(NodegetError::InvalidInput(
+            "Password cannot contain ':' or '|' characters".to_owned(),
+        )
+        .into());
+    }
+
     let has_credentials = username.is_some();
     let token_key = generate_random_string(16);
     let token_secret = generate_random_string(32);

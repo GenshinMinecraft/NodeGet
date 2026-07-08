@@ -34,6 +34,17 @@ fn ensure_rustls_aws_lc_rs_provider() {
 ///
 /// 成功时返回请求耗时；请求失败时返回错误。
 pub async fn httping_target(target: url::Url) -> Result<std::time::Duration> {
+    // scheme allow-list：仅允许 http/https，与 http_request 一致。
+    // reqwest 在 default-features=false + rustls-no-provider 下本就拒绝非 http(s) scheme，
+    // 此处提前校验给出清晰的 InvalidInput（而非依赖 reqwest 内部连接器拒绝的模糊错误）。
+    let scheme = target.scheme();
+    if scheme != "http" && scheme != "https" {
+        warn!(target: "task", "HTTP Ping scheme 不允许: url={target}, scheme={scheme}");
+        return Err(NodegetError::InvalidInput(format!(
+            "http_ping target scheme must be http or https, got '{scheme}'"
+        )));
+    }
+
     let client = GLOBAL_CLIENT
         .get_or_try_init(async || {
             ensure_rustls_aws_lc_rs_provider();

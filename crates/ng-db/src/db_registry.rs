@@ -54,6 +54,10 @@ pub struct DbRegistryManager {
     cancel_notify: Notify,
     /// 清理循环的 `JoinHandle`，`shutdown` 时用于等待退出
     cleanup_handle: Mutex<Option<JoinHandle<()>>>,
+    /// db.update 的 rename + registry-update + create_conn 序列锁（见 REVIEW L13）。
+    /// 防止并发 db.update / db.create 交错导致 pool 缺条目或文件重命名竞态。
+    /// 用 tokio::sync::Mutex（非 std），因该锁需跨多个 await 持有。
+    rename_lock: tokio::sync::Mutex<()>,
 }
 
 /// 获取当前 UNIX 时间戳（毫秒），用于 `last_used_ms` 追踪
@@ -90,6 +94,7 @@ impl DbRegistryManager {
                 cancelled: AtomicBool::new(false),
                 cancel_notify: Notify::new(),
                 cleanup_handle: Mutex::new(None),
+                rename_lock: tokio::sync::Mutex::new(()),
             });
             let mgr_clone = Arc::clone(&mgr_inner);
             let handle = tokio::spawn(async move {
@@ -110,6 +115,15 @@ impl DbRegistryManager {
     /// 获取全局单例引用，初始化前调用返回 `None`
     pub fn global() -> Option<&'static Arc<Self>> {
         MGR.get()
+    }
+
+    /// 获取 db.update 的 rename 序列锁（见 REVIEW L13）。
+    ///
+    /// 调用方应在 rename + registry-update + create_conn 整个序列期间持有该 guard，
+    /// 防止并发 db.update / db.create 交错导致 pool 缺条目或文件重命名竞态。
+    /// guard 可跨 await 持有（tokio::sync::Mutex）。
+    pub async fn lock_rename(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        self.rename_lock.lock().await
     }
 
     /// 从主库 `db_registry` 表恢复已有连接到内存池
@@ -334,9 +348,7 @@ impl DbRegistryManager {
             .one(main_db)
             .await?;
         if let Some(existing_model) = existing {
-            let current_conns = existing_model.db_connections.unwrap_or(0).saturating_add(1);
             let mut active: dbreg_entity::ActiveModel = existing_model.into();
-            active.db_connections = Set(Some(current_conns));
             if max_lifetime_ms.is_some() {
                 active.max_lifetime_ms = Set(max_lifetime_ms);
             }
@@ -344,7 +356,6 @@ impl DbRegistryManager {
         } else {
             let active = dbreg_entity::ActiveModel {
                 name: Set(name.to_owned()),
-                db_connections: Set(Some(1)),
                 max_lifetime_ms: Set(max_lifetime_ms),
                 created_at: Set(now_ms),
                 ..Default::default()
@@ -442,7 +453,6 @@ impl DbRegistryManager {
                 id: e.id,
                 name: e.name.clone(),
                 file_path: self.get_db_path(&e.name),
-                db_connections: e.db_connections,
                 max_lifetime_ms: e.max_lifetime_ms,
                 created_at: e.created_at,
                 is_active: pools.contains_key(&e.name),
@@ -483,8 +493,6 @@ pub struct DbInfo {
     pub name: String,
     /// `SQLite` 数据库文件绝对路径
     pub file_path: String,
-    /// 当前连接数引用计数，`None` 表示未跟踪
-    pub db_connections: Option<i32>,
     /// 连接最大生命周期（毫秒），`None` 表示永不过期
     pub max_lifetime_ms: Option<i64>,
     /// 创建时间，UNIX 时间戳（毫秒）

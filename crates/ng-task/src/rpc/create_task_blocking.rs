@@ -123,20 +123,35 @@ pub async fn create_task_blocking(
         if let Err(e) = manager.send_event(target_uuid, task_event).await {
             // 发送失败，清理 waiter 和 DB 记录
             manager.remove_blocking_waiter(task_id_u64);
-            let _ = task::Entity::delete_by_id(task_id).exec(db).await;
+            // 回滚失败原本完全静默（let _ = 丢弃）；现把失败信息附进错误消息，
+            // 便于运维据消息定位需手动清理的残留 task 行。
+            let rollback_failed = match task::Entity::delete_by_id(task_id).exec(db).await {
+                Ok(_) => false,
+                Err(del_err) => {
+                    error!(
+                        target: "task",
+                        task_id = task_id_u64,
+                        error = %del_err,
+                        "Database delete error during rollback (task row may need manual cleanup)"
+                    );
+                    true
+                }
+            };
             error!(target: "task", error = %e.1, "Error sending task event");
-            return Err(NodegetError::AgentConnectionError(format!(
-                "Error sending task event: {}",
-                e.1
-            ))
-            .into());
+            let mut msg = format!("Error sending task event: {}", e.1);
+            if rollback_failed {
+                msg.push_str("; rollback also failed, see logs (task row may need manual cleanup)");
+            }
+            return Err(NodegetError::AgentConnectionError(msg).into());
         }
 
         debug!(target: "task", task_id = task_id_u64, timeout_ms = timeout_ms, "waiting for agent result");
 
         // 等待结果或超时
         const MAX_TIMEOUT_MS: u64 = 300_000;
-        let clamped_timeout_ms = timeout_ms.min(MAX_TIMEOUT_MS);
+        // 下界钳到 1ms：timeout_ms == 0 时 timeout(Duration::ZERO) 首次 poll 即返回超时，
+        // 导致任务刚发出就报错并残留 success=NULL 行。0 无业务意义，钳为 1ms。
+        let clamped_timeout_ms = timeout_ms.clamp(1, MAX_TIMEOUT_MS);
         let timeout_duration = std::time::Duration::from_millis(clamped_timeout_ms);
         match tokio::time::timeout(timeout_duration, rx).await {
             Ok(Ok(response)) => {

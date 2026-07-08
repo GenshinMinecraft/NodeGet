@@ -43,7 +43,7 @@ crates/ng-db/src/
         └── get_database_type.rs # 主库后端类型字符串
 
 crates/ng-db/migration/src/
-├── lib.rs                       # Migrator：19 步迁移按时间序列举
+├── lib.rs                       # Migrator：22 步迁移按时间序列举
 └── main.rs                      # CLI 入口（已被注释为 no-op）
 ```
 
@@ -175,25 +175,36 @@ serve.rs 调用 `init_db_connection(DbConnectionConfig)`：建连 → 在 `Migra
 
 ### 实体表
 
+> **关于外键约束（by-design）**：本仓库所有表（监控 / cron / js / task / kv 等）均**未声明 FK 约束**
+> ——全 migration 目录无任何 `foreign_key` / `REFERENCES`。这是有意设计，非疏漏：
+> 1. **韧性优先**：`crontab_result.cron_name`、`js_result.js_worker_name` 等 denormalized 冗余列使父行
+>    删除后子行仍可按 name 查询，app 层按 name/id 查询并耐 dangling references。
+> 2. **类型不匹配**：`monitoring_uuid.id` 为 `integer`(i32)，但三张监控表的 `uuid_id` 为
+>    `small_integer`(i16)（见 H1），两端类型不一致使 FK 在 DB 层根本无法声明。
+>    即便未来修 H1（统一类型），加 FK 仍是独立的破坏性迁移，需评估对已有孤儿数据的影响。
+> 3. app 层的 `is_active`（in-memory pool）/ cache 是真正的活信号，不依赖 DB 层引用完整性。
+> 因此不要假设 DB 会拒绝孤儿行；清理父行时需 app 层同步清理子行（或接受孤儿，由 denormalized
+> name 列保证可查询）。
+
 | 表名 | 列 | 约束 / 索引 / 关系 | 备注 |
 |---|---|---|---|
 | `crontab` | `id` PK/UNIQUE i64, `name` UNIQUE String, `enable` bool, `cron_expression` String, `cron_type` JsonBinary NOT NULL, `last_run_time` Option<i64> | `cron_type` 不可空 | `entity/crontab.rs:8` |
 | `crontab_result` | `id` PK/UNIQUE i64, `cron_id` i64, `cron_name` String, `relative_id` Option<i64>, `run_time` Option<i64>, `success` Option<bool>, `message` Option<String> | 无 FK，`cron_id` 仅逻辑关联；迁移额外建有 `cron_id`、`cron_name` 与 `run_time DESC` 索引 | `entity/crontab_result.rs:8` |
-| `db_registry` | `id` PK i64, `name` UNIQUE String, `db_connections` Option<i32>, `max_lifetime_ms` Option<i64>, `created_at` i64 | 另 `#[derive(Default)]`；追踪用户自建 SQLite 库 | `entity/db_registry.rs:6` |
+| `db_registry` | `id` PK i64, `name` UNIQUE String, `max_lifetime_ms` Option<i64>, `created_at` i64 | 另 `#[derive(Default)]`；追踪用户自建 SQLite 库。`db_connections` 列已由 m20260708_000001 删除（stale counter，活信号靠 `is_active`） | `entity/db_registry.rs:6` |
 | `dynamic_monitoring` | `id` PK i64, `uuid_id` i16, `timestamp` i64, `storage_time` Option<i64>, `cpu_data`/`ram_data`/`load_data`/`system_data`/`disk_data`/`network_data`/`gpu_data` JsonBinary NOT NULL | data 列均 NOT-NULL Json；`storage_time` 由 m20260516 加入；`#[allow(clippy::missing_fields_in_debug)]`；m20260608 额外为 `storage_time` 建索引 | 高频（默认 1s）动态监控；`entity/dynamic_monitoring.rs:9` |
 | `dynamic_monitoring_summary` | `id` PK i64, `uuid_id` i16, `timestamp` i64, `storage_time` Option<i64>, `cpu_usage`/`gpu_usage` Option<i16>, `used_swap`/`total_swap`/`used_memory`/`total_memory`/`available_memory` Option<i64>, `load_one`/`load_five`/`load_fifteen` Option<i16>, `uptime` Option<i32>, `boot_time` Option<i64>, `process_count` Option<i32>, `total_space`/`available_space`/`read_speed`/`write_speed`/`transmit_speed`/`receive_speed`/`total_received`/`total_transmitted` Option<i64>, `tcp_connections`/`udp_connections` Option<i32> | 所有指标列可空；无 Relation；m20260608 额外为 `storage_time` 建索引 | m20260415 加入的预聚合行；`entity/dynamic_monitoring_summary.rs:6` |
 | `js_result` | `id` PK i64, `js_worker_id` i64, `js_worker_name` String, `run_type` String, `start_time`/`finish_time` Option<i64>, `param` Option<JsonBinary>, `result` Option<JsonBinary>, `error_message` Option<String> | `param`/`result` 可空 JSON；迁移额外建有 `js_worker_id` 索引与 `(js_worker_name, start_time DESC)` 组合索引 | `entity/js_result.rs:8` |
 | `js_worker` | `id` PK i64, `name` UNIQUE String, `description` Option<String>, `js_script` String, `js_byte_code` Option<Vec<u8>>, `route_name` Option<String>, `env` Option<Json>, `runtime_clean_time` Option<i64>, `max_run_time` Option<i64>（NULL→`DEFAULT_MAX_RUN_TIME_MS=30_000`）, `max_stack_size` Option<i64>（默认 1 MiB）, `max_heap_size` Option<i64>（默认 8 MiB）, `create_at` i64, `update_at` i64 | 限制列由 m20260509_000000 加入；常量定义在 ng-js-runtime；迁移另建有 `route_name` 唯一索引（以及一个与主键重复的 `id` 唯一索引） | `entity/js_worker.rs:8` |
 | `kv` | `id` PK i64, `namespace` String, `key` String, `value` JsonBinary NOT NULL | 实体层未声明复合唯一约束；迁移额外建有 `(namespace, key)` 唯一索引与 `namespace` 索引 | `entity/kv.rs:8` |
 | `monitoring_uuid` | `id` PK **i32**（非 i64）, `uuid` Uuid, `soft_delete` bool | `soft_delete` 由 m20260517_000000 加入（取代硬删）；UUID cache 自动复活软删行 | 全表最小 PK 宽度；`entity/monitoring_uuid.rs:6` |
-| `static_file` | `id` PK i64, `name` String, `path` String, `is_http_root` bool, `cors` bool, `enable` Option<bool> | 由 m20260531_000000_rename_static_to_static_file 从 `static` 改名；`enable` 由 m20260517_000001 加入；迁移层有 `name` 唯一索引与 `is_http_root=true` 的 partial unique 索引 | `entity/static_file.rs:8` |
+| `static_file` | `id` PK i64, `name` String, `path` String, `is_http_root` bool, `cors` bool, `enable` bool | 由 m20260531_000000_rename_static_to_static_file 从 `static` 改名；`enable` 由 m20260517_000001 加入、m20260708_000002 收紧为 NOT NULL DEFAULT true；迁移层有 `name` 唯一索引与 `is_http_root=true` 的 partial unique 索引 | `entity/static_file.rs:8` |
 | `static_monitoring` | `id` PK i64, `uuid_id` i16, `timestamp` i64, `storage_time` Option<i64>, `cpu_data`/`system_data`/`gpu_data` JsonBinary NOT NULL, `data_hash` Vec<u8> | `data_hash` 为 BLOB，供 `StaticHashCache` 对 5 分钟静态样本去重；m20260608 额外为 `storage_time` 建索引 | `entity/static_monitoring.rs:9` |
 | `task` | `id` PK i64, `uuid` Uuid, `token` String, `cron_source` Option<String>, `timestamp` Option<i64>, `success` Option<bool>, `error_message` Option<String>, `task_event_type` JsonBinary NOT NULL, `task_event_result` Option<JsonBinary> | `task_event_result` 可空；查询默认上限 `DEFAULT_LIMIT=1000`（在 ng-task 的 `task.query` RPC 施加）；m20260608 额外为 `task_event_type` 建索引（SQLite 普通索引 / PostgreSQL GIN） | `entity/task.rs:8` |
 | `token` | `id` PK i64, `version` i32, `token_key` UNIQUE String, `token_hash` String, `time_stamp_from`/`time_stamp_to` Option<i64>, `token_limit` JsonBinary NOT NULL, `username` UNIQUE Option<String>, `password_hash` Option<String> | `token_key` 与 `username` 均 UNIQUE（username 可空唯一）；`token_limit` 为 Json `Vec<Limit>`；Token 鉴权用 SHA256 + `"NODEGET"` salt（在 ng-token，非此处） | `entity/token.rs:8` |
 
 ### 迁移序列
 
-`Migrator`（`migration/src/lib.rs:3`）实现 `MigratorTrait`，`migrations()` 返回按时间序排列的 19 步 `Vec<Box<dyn MigrationTrait>>`，最旧为 `m20260113_000000_create_monitoring_uuid`，最新为 `m20260608_000000_add_indexes`。迁移通过 `init_db_connection` 中的 `Migrator::up(&db, None)` 在运行时应用。`migration/src/main.rs` 的 CLI `cli::run_cli` **已被注释**，`cargo run -p ng-migration` 为 no-op。
+`Migrator`（`migration/src/lib.rs:3`）实现 `MigratorTrait`，`migrations()` 返回按时间序排列的 22 步 `Vec<Box<dyn MigrationTrait>>`，最旧为 `m20260113_000000_create_monitoring_uuid`，最新为 `m20260708_000002_static_file_enable_not_null`。迁移通过 `init_db_connection` 中的 `Migrator::up(&db, None)` 在运行时应用。`migration/src/main.rs` 的 CLI `cli::run_cli` **已被注释**，`cargo run -p ng-migration` 为 no-op。
 
 ## Crate 内部约定
 

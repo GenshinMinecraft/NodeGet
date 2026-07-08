@@ -25,6 +25,9 @@ impl MigratorTrait for Migrator {
             Box::new(m20260524_000000_create_db_registry::Migration),
             Box::new(m20260531_000000_rename_static_to_static_file::Migration),
             Box::new(m20260608_000000_add_indexes::Migration),
+            Box::new(m20260708_000000_drop_redundant_indexes::Migration),
+            Box::new(m20260708_000001_drop_db_connections_column::Migration),
+            Box::new(m20260708_000002_static_file_enable_not_null::Migration),
         ]
     }
 }
@@ -47,3 +50,6 @@ mod m20260517_000001_add_enable_to_static;
 mod m20260524_000000_create_db_registry;
 mod m20260531_000000_rename_static_to_static_file;
 mod m20260608_000000_add_indexes;
+mod m20260708_000000_drop_redundant_indexes;
+mod m20260708_000001_drop_db_connections_column;
+mod m20260708_000002_static_file_enable_not_null;

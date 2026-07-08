@@ -47,6 +47,14 @@ pub async fn change_password(
             )
             .into());
         }
+        // 拒绝含分隔符的 password，与 generate_token 一致（见 REVIEW L27）：
+        // `username|password` 中 password 含 `:` 会被 TokenOrAuth 冒号优先误判为 Token 模式。
+        if new_password.contains(':') || new_password.contains('|') {
+            return Err(NodegetError::InvalidInput(
+                "Password cannot contain ':' or '|' characters".to_owned(),
+            )
+            .into());
+        }
 
         let target_model = find_target_token(&target_token).await?;
 

@@ -800,9 +800,13 @@ curl -X POST http://127.0.0.1:2211/jsonrpc \
 
 ### 权限要求
 
-- Permission: `NodeGet::ExecSql`
+- Permission: `NodeGet::GetDatabaseType`
 - Scope 行为:
     - `Global` Scope 下拥有该权限: 可返回数据库类型
+
+> **变更说明**：此前此方法复用全信任 `NodeGet::ExecSql` 权限（仅查后端类型即要求最高授权）。
+> 现拆出低特权 `NodeGet::GetDatabaseType`，遵循最小权限原则——仅需探测后端类型的运维/前端工具
+> 无需授予任意 SQL 执行权。已持有 `ExecSql` 的旧 token 不自动继承此新权限，需显式授予。
 
 `token` 支持以下格式之一:
 

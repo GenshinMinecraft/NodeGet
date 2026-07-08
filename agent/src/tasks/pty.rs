@@ -274,6 +274,17 @@ where
     // PTY→WS 使用有界通道，网络拥塞时对 PTY 读取施加背压而非无限堆积
     let (pty_to_ws_tx, mut pty_to_ws_rx) = mpsc::channel::<Vec<u8>>(4096);
 
+    // 已知平台限制（REVIEW M6/L10）：spawn_blocking 的 reader JoinHandle 被丢弃，
+    // reader 线程靠 read() 返回数据后 try_send 失败而退出。若 read() 阻塞在 syscall
+    // 内（Windows ConPTY 在 slave 关闭后仍可能长时阻塞），线程永不退出，跨会话累积
+    // 泄漏 OS 线程（最终触达 tokio 默认 512 blocking-pool 上限）。Unix 通常不受影响
+    // （slave 关闭后 read 立即返回）。
+    //
+    // 彻底修复需改非阻塞读 + 周期性检查 cancel 信号，但 portable_pty 的 reader 是
+    // `Box<dyn Read>`（阻塞 API，不暴露 fd / 不支持 overlapped IO），无法直接 poll/select
+    // 或取消。真正的修复需换异步 PTY 实现（如直接用 ConPTY overlapped IO 或 Unix pty
+    // + tokio fd 异步），属较大改造。当前依赖 try_send 背压 + 会话结束 drop 通道使
+    // reader 在下次 read 返回后退出作为缓解。
     task::spawn_blocking(move || {
         let mut buffer = [0u8; 8192];
         loop {

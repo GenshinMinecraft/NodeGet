@@ -173,6 +173,12 @@ pub enum Kv {
     Write(String),    // 写入 KV 数据，遇到同名 Key 会覆盖
     Delete(String),   // 删除 KV 数据
 }
+// 跨操作不互通示例（重要）：
+// - 授予 `Kv::Read("metadata_*")` 仅能读以 `metadata_` 开头的键，**不隐含** Write/Delete 权限。
+//   即便对同一键，写/删需单独授予 `Kv::Write("metadata_*")` / `Kv::Delete("metadata_*")`。
+// - 通配符按 granted pattern 匹配 required key：`Read("meta*")` 覆盖 `metadata_x`，
+//   但 `Read("metadata_a")`（精确）不覆盖 `metadata_*`（通配 required）——通配只向后匹配具体键。
+// - Read/Write/Delete 是三条独立权限臂，`==` 比较不会把 Read 视作覆盖 Write。
 
 // Terminal 权限枚举
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -193,6 +199,7 @@ pub enum NodeGet {
     GetRtPool,        // 查看 JS Runtime 池信息
     DeleteAgentUuid,  // [已废弃] 删除 Agent Uuid，请使用 MonitoringUuid::Delete
     ExecSql,          // 执行 SQL
+    GetDatabaseType,  // 查询主库后端类型（低特权只读，无需 ExecSql）
 }
 
 // MonitoringUuid 权限枚举（权威 Agent UUID 管理权限）

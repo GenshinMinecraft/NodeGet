@@ -8,7 +8,6 @@ pub struct Model {
     pub id: i64,
     #[sea_orm(unique)]
     pub name: String,
-    pub db_connections: Option<i32>,
     pub max_lifetime_ms: Option<i64>,
     pub created_at: i64,
 }

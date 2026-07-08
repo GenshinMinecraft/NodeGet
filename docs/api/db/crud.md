@@ -255,7 +255,6 @@ pub enum Db {
         "id": 1,
         "name": "my_database",
         "file_path": "./db/my_database.db",
-        "db_connections": 1,
         "max_lifetime_ms": null,
         "created_at": 1748102400000,
         "is_active": true
@@ -264,7 +263,6 @@ pub enum Db {
         "id": 2,
         "name": "another_db",
         "file_path": "./db/another_db.db",
-        "db_connections": 0,
         "max_lifetime_ms": 3600000,
         "created_at": 1748102500000,
         "is_active": false
@@ -282,7 +280,6 @@ pub enum Db {
 | `id`              | i64           | db_registry 表中的主键 ID                                                                                  |
 | `name`            | String        | 数据库名称                                                                                                 |
 | `file_path`       | String        | SQLite 文件在磁盘上的路径（相对于工作目录）                                                                             |
-| `db_connections`  | `Option<i32>` | 连接引用计数：创建时初始化为 `1`，每次 `create_conn` 递增；不是当前活跃连接数                                                      |
 | `max_lifetime_ms` | `Option<i64>` | 连接空闲超时时间（毫秒），null=永不超时                                                                                |
 | `created_at`      | i64           | 创建时间戳（毫秒）                                                                                             |
 | `is_active`       | bool          | 是否正在连接池中：创建后为 true，`get_conn()` 连接成功后为 true，超过 `max_lifetime_ms` 未被访问变为 false，为 false 时下次调用会自动重建启动连接池 |

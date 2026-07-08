@@ -74,7 +74,7 @@
 | Cleanup ticker 间隔 | 常量 `crates/ng-js-runtime/src/runtime_pool.rs:33`（`CLEANUP_INTERVAL_MS`）；interval 构造于 `:449`，`MissedTickBehavior::Delay` 设于 `:450` | `5_000ms`，`MissedTickBehavior::Delay`。 |
 | `SyncSender` 容量 | `crates/ng-js-runtime/src/runtime_pool.rs`（`RuntimeWorkerHandle`） | `std::sync::mpsc::sync_channel(256)`。 |
 | `RUNTIME_CLEAN_TIME_NONE` | `crates/ng-js-runtime/src/runtime_pool.rs:31` | `-1`，负值 load 视为 `None`。 |
-| Watchdog 死线扫描上限 | `crates/ng-js-runtime/src/server_runtime.rs:201` | 每 `<=50ms` 一轮扫描。 |
+| Watchdog 死线扫描上限 | `crates/ng-js-runtime/src/server_runtime.rs:230`（`init_watchdog_manager`，函数头于 `:201`） | 每 `<=50ms` 一轮扫描。 |
 | `__nodeget_clear_all_timers` 上限 | `GLOBALS_JS` | 最多 100 次迭代。 |
 | `setInterval` 最小间隔钳制 | `GLOBALS_JS` | 钳到 `>=4ms`。 |
 

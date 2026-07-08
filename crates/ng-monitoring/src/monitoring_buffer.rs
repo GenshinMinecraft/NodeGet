@@ -382,7 +382,10 @@ where
         let take = chunk_size.min(batch.len());
         let sub_batch: Vec<A> = batch.drain(..take).collect();
         let count = sub_batch.len();
-        match E::insert_many(sub_batch).exec(db).await {
+        // on_conflict_do_nothing：并发同 (uuid_id, data_hash) 等冲突时，DB 跳过冲突行、
+        // 保留非冲突行，整子批不再因一条冲突而整体丢弃（见 REVIEW M11）。
+        // 生成 ON CONFLICT DO NOTHING（SQLite/PostgreSQL 均支持，匹配任意 UNIQUE 约束）。
+        match E::insert_many(sub_batch).on_conflict_do_nothing().exec(db).await {
             Ok(_) => inserted += count,
             Err(e) => {
                 error!(
