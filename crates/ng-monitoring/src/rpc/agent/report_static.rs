@@ -156,17 +156,18 @@ pub async fn report_static(
 
         debug!(target: "monitoring", agent_uuid = %static_monitoring_data.uuid, "Received static data, sending to buffer");
 
-        // 先更新 hash 缓存再 send：缩小并发竞态窗口。
-        // 此前 update 在 send 之后，并发同 (uuid_id, data_hash) 请求的 is_duplicate/DB find
-        // 在 ~500ms flush 窗口内都返回 "not exists"，各自 send → 重复 insert → UNIQUE 冲突
-        // → do_flush 整子批丢弃（见 REVIEW M11）。提前 update 让后续并发请求的 fast path 命中。
-        // 仍有 TOCTOU（仍可能两个请求同时通过 update 前的检查），故需配合 do_flush 降级。
-        hash_cache.update(uuid_id, &data_hash);
-
         monitoring_buffer::with_buffers(|b| b.static_mon.send(in_data))
             .ok_or_else(|| {
                 NodegetError::ConfigNotFound("MonitoringBuffers not initialized".to_owned())
             })?;
+
+        // send 之后再更新 hash 缓存。
+        // 不能提前到 send 之前：BufferSender::send 在 channel 满/关闭时静默丢弃数据
+        // （仅 warn+计数），若先 update 后 send，则丢弃时 hash 已被标记为「已存在」，
+        // 后续相同 hash 请求的 fast path is_duplicate 命中 → 永久 skip，但 DB 实际无该行，
+        // 致 static 监控数据丢失（见 REVIEW M11 复盘）。竞态窗口的缩小改由 do_flush 端的
+        // on_conflict_do_nothing 承担（M11a），无需此处提前 update。
+        hash_cache.update(uuid_id, &data_hash);
 
         debug!(target: "monitoring", agent_uuid = %static_monitoring_data.uuid, "Static data buffered successfully");
 

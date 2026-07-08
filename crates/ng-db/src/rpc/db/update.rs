@@ -66,9 +66,9 @@ pub async fn update(token: String, name: String, new_name: String) -> RpcResult<
         let mgr = DbRegistryManager::global().ok_or_else(|| {
             NodegetError::ConfigNotFound("DbRegistryManager not initialized".to_owned())
         })?;
-        // 持 rename 序列锁覆盖 rename + registry-update + create_conn（见 REVIEW L13），
+        // 持连接操作序列锁覆盖 rename + registry-update + create_conn（见 REVIEW L13），
         // 防止并发 db.update / db.create 交错导致 pool 缺条目或文件重命名竞态。
-        let _rename_guard = mgr.lock_rename().await;
+        let _conn_op_guard = mgr.lock_conn_op().await;
         let old_file = mgr.get_db_path(&name);
         let new_file = mgr.get_db_path(&new_name);
 

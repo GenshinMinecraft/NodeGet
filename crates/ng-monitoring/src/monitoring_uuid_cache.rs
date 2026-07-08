@@ -53,7 +53,7 @@ fn recover_write(
 ///
 /// 三张监控表的 `uuid_id` 列为 `small_integer`(i16)，缓存与公共 API 也用 i16。
 /// 直接 `as i16` 在 id > 32767 时静默回绕，导致两个不同 UUID 映射到同一 id（跨 Agent
-/// 数据错配、UNIQUE(uuid_id, data_hash) 冲突）。此函数改用 checked conversion，
+/// 数据错配、`UNIQUE(uuid_id, data_hash)` 冲突）。此函数改用 checked conversion，
 /// 超界返回 `None`，由调用方决定跳过（构建缓存）或返错（写入路径）。
 ///
 /// 根治需破坏性迁移把三表 `uuid_id` 列改为 `integer`(i32) 并改全链路类型（见 REVIEW H1）；
@@ -188,6 +188,9 @@ impl MonitoringUuidCache {
         result
     }
 
+    // get_or_insert 涵盖缓存命中、DB 查询、软删复活、insert 与 UNIQUE 冲突回退（含复活）
+    // 等多条路径，逻辑内聚但行数超 pedantic 阈值；不强行拆分以免割裂「复活一致性」语义。
+    #[allow(clippy::too_many_lines)]
     /// 查找或插入 UUID，返回对应的数字 ID。
     ///
     /// 1. 先查内存缓存，若 UUID 活跃则直接返回 ID
@@ -292,7 +295,30 @@ impl MonitoringUuidCache {
                                 "monitoring_uuid insert conflicted but row not found: {e}"
                             ))
                         })?;
-                    try_id_i16(m.id).map(|id| (id, m.soft_delete))
+                    // 先取 id（into() 会消费 m）；超界则 arm 产 None，由外层 ok_or_else 兜底。
+                    match try_id_i16(m.id) {
+                        Some(id) => {
+                            // 与 existing 分支保持一致的复活语义：若 re-query 到 soft_delete=true，
+                            // 同样执行复活（update soft_delete=false），而非原样缓存软删状态
+                            // （否则 get_or_insert「自动复活软删条目」契约在 conflict 路径下失效）。
+                            let soft_delete = if m.soft_delete {
+                                debug!(target: "monitoring", %uuid, id, "get_or_insert: 冲突行已软删，执行复活");
+                                let mut active: monitoring_uuid::ActiveModel = m.into();
+                                active.soft_delete = Set(false);
+                                active.update(db).await.map_err(|ue| {
+                                    NodegetError::DatabaseError(format!(
+                                        "Failed to resurrect monitoring_uuid after conflict: {ue}"
+                                    ))
+                                })?;
+                                info!(target: "monitoring_uuid_cache", %uuid, "Resurrected soft-deleted uuid (conflict path)");
+                                false
+                            } else {
+                                m.soft_delete
+                            };
+                            Some((id, soft_delete))
+                        }
+                        None => None,
+                    }
                 } else {
                     return Err(NodegetError::DatabaseError(format!(
                         "Failed to insert monitoring_uuid: {e}"

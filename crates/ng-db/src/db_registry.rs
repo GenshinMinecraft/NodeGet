@@ -54,10 +54,13 @@ pub struct DbRegistryManager {
     cancel_notify: Notify,
     /// 清理循环的 `JoinHandle`，`shutdown` 时用于等待退出
     cleanup_handle: Mutex<Option<JoinHandle<()>>>,
-    /// db.update 的 rename + registry-update + create_conn 序列锁（见 REVIEW L13）。
-    /// 防止并发 db.update / db.create 交错导致 pool 缺条目或文件重命名竞态。
-    /// 用 tokio::sync::Mutex（非 std），因该锁需跨多个 await 持有。
-    rename_lock: tokio::sync::Mutex<()>,
+    /// 连接创建/重命名操作序列锁（见 REVIEW L13）。
+    /// 由 `db.create` 与 `db.update` 调用方持有，覆盖 create_conn / rename + registry-update
+    /// 序列，防止并发 db.update 与 db.create 的 create_conn 交错导致 pool 缺条目或文件
+    /// 重命名竞态。用 tokio::sync::Mutex（非 std），因该锁需跨多个 await 持有。
+    /// 注意：锁在调用方持有而非 create_conn 内部，避免 db.update 持锁后调用 create_conn
+    /// 造成递归死锁。
+    conn_op_lock: tokio::sync::Mutex<()>,
 }
 
 /// 获取当前 UNIX 时间戳（毫秒），用于 `last_used_ms` 追踪
@@ -94,7 +97,7 @@ impl DbRegistryManager {
                 cancelled: AtomicBool::new(false),
                 cancel_notify: Notify::new(),
                 cleanup_handle: Mutex::new(None),
-                rename_lock: tokio::sync::Mutex::new(()),
+                conn_op_lock: tokio::sync::Mutex::new(()),
             });
             let mgr_clone = Arc::clone(&mgr_inner);
             let handle = tokio::spawn(async move {
@@ -117,13 +120,13 @@ impl DbRegistryManager {
         MGR.get()
     }
 
-    /// 获取 db.update 的 rename 序列锁（见 REVIEW L13）。
+    /// 获取连接创建/重命名操作序列锁（见 REVIEW L13）。
     ///
-    /// 调用方应在 rename + registry-update + create_conn 整个序列期间持有该 guard，
-    /// 防止并发 db.update / db.create 交错导致 pool 缺条目或文件重命名竞态。
+    /// `db.create` 与 `db.update` 调用方在 create_conn / rename + registry-update 序列期间
+    /// 持有该 guard，防止并发操作交错导致 pool 缺条目或文件重命名竞态。
     /// guard 可跨 await 持有（tokio::sync::Mutex）。
-    pub async fn lock_rename(&self) -> tokio::sync::MutexGuard<'_, ()> {
-        self.rename_lock.lock().await
+    pub async fn lock_conn_op(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        self.conn_op_lock.lock().await
     }
 
     /// 从主库 `db_registry` 表恢复已有连接到内存池

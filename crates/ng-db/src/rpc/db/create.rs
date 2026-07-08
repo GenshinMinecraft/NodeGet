@@ -52,6 +52,9 @@ pub async fn create(token: String, name: String) -> RpcResult<Box<RawValue>> {
         let mgr = DbRegistryManager::global().ok_or_else(|| {
             NodegetError::ConfigNotFound("DbRegistryManager not initialized".to_owned())
         })?;
+        // 持连接操作序列锁覆盖 create_conn（见 REVIEW L13），防止与并发 db.update 的
+        // rename + create_conn 序列交错导致 pool 缺条目或文件竞态。
+        let _conn_op_guard = mgr.lock_conn_op().await;
         let _conn = mgr.create_conn(&name, None).await?;
 
         debug!(target: "db", token_key = tk, username = un, name = %name, "database created");
