@@ -169,8 +169,7 @@ where
                 query = query.filter(timestamp_col.lte(*end));
             }
             ResolvedCondition::StorageTimeFromTo(start, end) => {
-                query =
-                    query.filter(storage_time_col.gte(*start).and(storage_time_col.lte(*end)));
+                query = query.filter(storage_time_col.gte(*start).and(storage_time_col.lte(*end)));
             }
             ResolvedCondition::StorageTimeFrom(start) => {
                 query = query.filter(storage_time_col.gte(*start));

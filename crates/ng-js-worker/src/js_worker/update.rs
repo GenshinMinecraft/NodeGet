@@ -13,6 +13,7 @@ use ng_core::permission::data_structure::JsWorker as JsWorkerPermission;
 use ng_core::utils::get_local_timestamp_ms_i64;
 use ng_db::entity::js_worker;
 use ng_db::get_db;
+use ng_infra::server::to_rpc_error;
 use ng_js_runtime::compile_js_module_to_bytecode;
 use ng_js_runtime::runtime_pool;
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
@@ -163,13 +164,6 @@ pub async fn update(
 
     match process_logic.await {
         Ok(result) => Ok(result),
-        Err(e) => {
-            let nodeget_err = ng_core::error::anyhow_to_nodeget_error(&e);
-            Err(jsonrpsee::types::ErrorObject::owned(
-                nodeget_err.error_code() as i32,
-                format!("{nodeget_err}"),
-                None::<()>,
-            ))
-        }
+        Err(e) => Err(to_rpc_error(&e)),
     }
 }

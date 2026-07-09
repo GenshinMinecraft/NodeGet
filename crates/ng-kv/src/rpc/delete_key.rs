@@ -3,7 +3,8 @@
 use crate::auth::check_kv_delete_permission;
 use crate::db::delete_key_from_kv;
 use jsonrpsee::core::RpcResult;
-use ng_core::error::{NodegetError, anyhow_to_nodeget_error};
+use ng_core::error::NodegetError;
+use ng_infra::server::to_rpc_error;
 use serde_json::value::RawValue;
 use tracing::debug;
 
@@ -37,13 +38,6 @@ pub async fn delete_key(token: String, namespace: String, key: String) -> RpcRes
 
     match process_logic.await {
         Ok(result) => Ok(result),
-        Err(e) => {
-            let nodeget_err = anyhow_to_nodeget_error(&e);
-            Err(jsonrpsee::types::ErrorObject::owned(
-                nodeget_err.error_code() as i32,
-                format!("{nodeget_err}"),
-                None::<()>,
-            ))
-        }
+        Err(e) => Err(to_rpc_error(&e)),
     }
 }

@@ -40,15 +40,14 @@ pub enum KvNamespaceListPermission {
 /// 合法返回 Ok(()),否则返回错误
 pub fn validate_namespace(namespace: &str) -> anyhow::Result<()> {
     if namespace.is_empty() {
-        return Err(
-            NodegetError::InvalidInput("Namespace cannot be empty".to_owned()).into(),
-        );
+        return Err(NodegetError::InvalidInput("Namespace cannot be empty".to_owned()).into());
     }
     if namespace.contains('*') {
         warn!(target: "kv", namespace = %namespace, "namespace validation failed: contains '*'");
-        return Err(
-            NodegetError::InvalidInput("Namespace cannot contain '*' character".to_owned()).into(),
-        );
+        return Err(NodegetError::InvalidInput(
+            "Namespace cannot contain '*' character".to_owned(),
+        )
+        .into());
     }
     Ok(())
 }

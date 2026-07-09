@@ -9,17 +9,14 @@
 //! | `load_from_db` | 迁移自 `server/src/cache/mod.rs` | 使用 `ng_db::get_db()` |
 //! | `DbBackedCache` trait | 迁移自 `server/src/cache/mod.rs` | 路径已调整 |
 //! | `make_global_cache!` 宏 | 迁移自 `server/src/cache/mod.rs` | `$crate::server::DbBackedCache` |
-//! | `token_identity` | 迁移自 `server/src/rpc/mod.rs` | 纯字符串逻辑 |
-//! | `TruncatedRaw` | 迁移自 `server/src/rpc/mod.rs` | 使用 `serde_json::RawValue` |
-//! | `rpc_exec!` 宏 | 迁移自 `server/src/rpc/mod.rs` | `$crate::server::TruncatedRaw` |
-//! | `RpcHelper` trait | 迁移自 `server/src/rpc/mod.rs` | 使用 `ng_db::get_db()` |
+//! | `token_identity` | **re-export 自 `ng_db::rpc`** | 单一事实源在 ng-db（见 REVIEW M9） |
+//! | `TruncatedRaw` | **re-export 自 `ng_db::rpc`** | 同上 |
+//! | `rpc_exec!` 宏 | 本地定义，委托上方 re-export 的 TruncatedRaw | macro_rules 1.0 无法跨 crate re-export，故保留宏壳 |
+//! | `RpcHelper` trait | **re-export 自 `ng_db::rpc`** | 同上 |
+//! | `to_rpc_error` | **re-export 自 `ng_db::rpc`** | 同上，供 M10 内联错误转换统一复用 |
 
 use ng_core::error::NodegetError;
-use sea_orm::{ActiveValue, DatabaseConnection, EntityTrait, ModelTrait, Set};
-use serde::Serialize;
-use serde_json::value::RawValue;
-use serde_json::{Value, to_value};
-use std::fmt;
+use sea_orm::{EntityTrait, ModelTrait};
 use std::future::Future;
 
 // ── 辅助函数：一行从 Entity 全量加载 Models ────────────────────────────
@@ -161,45 +158,18 @@ macro_rules! make_global_cache {
     };
 }
 
-// ── RPC 日志工具 ───────────────────────────────────────────────────
+// ── RPC 基础设施（re-export 自 ng-db，单一事实源）─────────────────────
+//
+// 此前 token_identity / TruncatedRaw / rpc_exec! / RpcHelper 在 ng-infra 与 ng-db
+// 两处各有一份逐字复制的实现（见 REVIEW M9）。因依赖方向为 ng-infra → ng-db
+//（RpcHelper::get_db / load_from_db 调 ng_db::get_db），无法让 ng-db 反向依赖 ng-infra，
+// 故权威定义留在 ng-db（ng-task / server 二进制等已直接使用 ng_db::rpc::{...}），
+// ng-infra 改为 re-export，消除双份实现与未来漂移风险。
+//
+// 调用方无需改动：用 ng_infra::server::{token_identity, TruncatedRaw, RpcHelper,
+// to_rpc_error} 与 ng_infra::rpc_exec! 的代码，经 re-export 透明指向 ng-db 权威定义。
 
-/// 从原始 Token 字符串中提取 `(token_key, username)`。
-///
-/// - Token 模式（`key:secret`）：返回 `(key, "")`
-/// - Auth 模式（`username|password`）：返回 `("", username)`
-/// - 无法识别时：返回 `("???", "")`
-///
-/// 零分配：返回借用的字符串切片，指向原始字符串内部。
-pub fn token_identity(token: &str) -> (&str, &str) {
-    token.find(':').map_or_else(
-        || {
-            // 未找到冒号，尝试管道符分隔（Auth 模式）
-            token
-                .find('|')
-                .map_or(("???", ""), |pipe| ("", &token[..pipe]))
-        },
-        |colon| (&token[..colon], ""),
-    )
-}
-
-/// `&RawValue` 的截断 Display 包装，输出超过 1024 字节时截断并附加长度提示。
-pub struct TruncatedRaw<'a>(pub &'a RawValue);
-
-impl fmt::Display for TruncatedRaw<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        const MAX: usize = 1024;
-        let s = self.0.get();
-        if s.len() <= MAX {
-            // 未超限，原样输出
-            f.write_str(s)
-        } else {
-            // 超限时截断到字符边界，附加总字节数提示
-            let end = s.floor_char_boundary(MAX);
-            f.write_str(&s[..end])?;
-            write!(f, "[...{} bytes total]", s.len())
-        }
-    }
-}
+pub use ng_db::rpc::{RpcHelper, TruncatedRaw, to_rpc_error, token_identity};
 
 /// RPC 方法返回 `RpcResult<Box<RawValue>>` 的统一日志宏。
 ///
@@ -213,6 +183,11 @@ impl fmt::Display for TruncatedRaw<'_> {
 ///
 /// 使用 `target: "rpc"` 作为跨领域 RPC 基础设施日志，
 /// 区别于领域特定 target（kv、token、js_worker 等）。
+///
+/// 宏体引用 `$crate::server::TruncatedRaw`（上方 re-export 自 ng-db），保证
+/// `ng_infra::rpc_exec!` 与 `ng_db::rpc_exec!` 两入口指向同一 TruncatedRaw 实现。
+/// 宏本身在 ng-infra 与 ng-db 各保留一份是宏 re-export 的固有约束（macro_rules 1.0
+/// 无法跨 crate `pub use` re-export），但两者逻辑逐字一致且 $crate 路径各自正确。
 #[macro_export]
 macro_rules! rpc_exec {
     ($expr:expr) => {{
@@ -231,32 +206,4 @@ macro_rules! rpc_exec {
             }
         }
     }};
-}
-
-/// RPC 公共辅助 trait，提供 DB 访问与序列化工具方法。
-///
-/// 使用空 impl 引入方法：
-/// ```ignore
-/// impl RpcHelper for MyRpcImpl {}
-/// ```
-pub trait RpcHelper {
-    /// 将值序列化为 JSON 并包装为 `sea_orm::Set`，用于 ActiveModel 字段赋值。
-    ///
-    /// - `val` — 待序列化的值
-    /// - 返回 `ActiveValue<Value>`，失败时返回序列化错误
-    fn try_set_json<T: Serialize>(val: T) -> anyhow::Result<ActiveValue<Value>> {
-        to_value(val).map(Set).map_err(|e| {
-            NodegetError::SerializationError(format!("Serialization error: {e}")).into()
-        })
-    }
-
-    /// 获取全局数据库连接。
-    ///
-    /// # Errors
-    ///
-    /// 当 DB 未初始化时返回错误。
-    fn get_db() -> anyhow::Result<&'static DatabaseConnection> {
-        ng_db::get_db()
-            .ok_or_else(|| NodegetError::DatabaseError("DB not initialized".to_owned()).into())
-    }
 }

@@ -6,6 +6,7 @@ use jsonrpsee::core::RpcResult;
 use ng_core::error::NodegetError;
 use ng_core::permission::data_structure::Token;
 use ng_core::permission::token_auth::TokenOrAuth;
+use ng_infra::server::to_rpc_error;
 use serde::Serialize;
 use serde_json::value::RawValue;
 use tracing::{debug, warn};
@@ -61,7 +62,7 @@ pub async fn list_all_tokens(token: String) -> RpcResult<Box<RawValue>> {
                 timestamp_from: entry.model.time_stamp_from,
                 timestamp_to: entry.model.time_stamp_to,
                 token_limit: std::sync::Arc::clone(&entry.parsed_limits),
-                username: entry.model.username.as_deref().map(|u| std::sync::Arc::from(u)),
+                username: entry.model.username.as_deref().map(std::sync::Arc::from),
             })
             .collect();
 
@@ -74,13 +75,6 @@ pub async fn list_all_tokens(token: String) -> RpcResult<Box<RawValue>> {
     // 统一错误转换：anyhow → NodegetError → JSON-RPC ErrorObject
     match process_logic.await {
         Ok(result) => Ok(result),
-        Err(e) => {
-            let nodeget_err = ng_core::error::anyhow_to_nodeget_error(&e);
-            Err(jsonrpsee::types::ErrorObject::owned(
-                nodeget_err.error_code() as i32,
-                format!("{nodeget_err}"),
-                None::<()>,
-            ))
-        }
+        Err(e) => Err(to_rpc_error(&e)),
     }
 }

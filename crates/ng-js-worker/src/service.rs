@@ -153,7 +153,8 @@ pub async fn enqueue_defined_js_worker_run(
 
     // 执行计时起点（insert_js_result_row 内部自取 start_time 写库，此处独立用于耗时统计）
     let start_time = get_local_timestamp_ms_i64().unwrap_or(0);
-    let js_result_id = insert_js_result_row(&db, worker_id, &worker_name, run_type_text, &params).await?;
+    let js_result_id =
+        insert_js_result_row(&db, worker_id, &worker_name, run_type_text, &params).await?;
     trace!(target: "js_worker", js_result_id = js_result_id, worker = %worker_name, "spawning bytecode execution task");
 
     tokio::spawn(async move {
@@ -427,7 +428,8 @@ pub async fn enqueue_source_js_worker_run(
 
     // 执行计时起点（insert_js_result_row 内部自取 start_time 写库，此处独立用于耗时统计）
     let start_time = get_local_timestamp_ms_i64().unwrap_or(0);
-    let js_result_id = insert_js_result_row(&db, worker_id, &worker_name, run_type_text, &params).await?;
+    let js_result_id =
+        insert_js_result_row(&db, worker_id, &worker_name, run_type_text, &params).await?;
 
     let worker_name_for_log = worker_name.clone();
     trace!(target: "js_worker", js_result_id = js_result_id, worker = %worker_name_for_log, "spawning source mode execution task");

@@ -89,7 +89,9 @@ pub async fn init_db_connection(config: DbConnectionConfig) -> anyhow::Result<()
     // 故在 Migrator::up 建表之前抢先设置，确保新库建库即启用 INCREMENTAL。
     // 对已有数据的老库，此设置不生效（auto_vacuum 值保持 NONE），需用官方迁移教程转库。
     if db.get_database_backend() == sea_orm::DatabaseBackend::Sqlite {
-        let _ = db.execute_unprepared("PRAGMA auto_vacuum = INCREMENTAL;").await;
+        let _ = db
+            .execute_unprepared("PRAGMA auto_vacuum = INCREMENTAL;")
+            .await;
     }
 
     Migrator::up(&db, None).await.map_err(|e| {

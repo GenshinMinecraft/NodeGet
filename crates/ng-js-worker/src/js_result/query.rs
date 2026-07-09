@@ -12,6 +12,7 @@ use ng_core::js_result::query::{JsResultDataQuery, JsResultQueryCondition};
 use ng_core::utils::{DEFAULT_RESULT_QUERY_LIMIT, MAX_QUERY_LIMIT};
 use ng_db::entity::js_result;
 use ng_db::get_db;
+use ng_infra::server::to_rpc_error;
 use sea_orm::{ColumnTrait, EntityTrait, ExprTrait, QueryFilter, QueryOrder, QuerySelect};
 use serde_json::value::RawValue;
 use tracing::debug;
@@ -184,13 +185,6 @@ pub async fn query(token: String, query: JsResultDataQuery) -> RpcResult<Box<Raw
 
     match process_logic.await {
         Ok(result) => Ok(result),
-        Err(e) => {
-            let nodeget_err = ng_core::error::anyhow_to_nodeget_error(&e);
-            Err(jsonrpsee::types::ErrorObject::owned(
-                nodeget_err.error_code() as i32,
-                format!("{nodeget_err}"),
-                None::<()>,
-            ))
-        }
+        Err(e) => Err(to_rpc_error(&e)),
     }
 }

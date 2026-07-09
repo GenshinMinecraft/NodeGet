@@ -12,6 +12,7 @@ use jsonrpsee::core::RpcResult;
 use ng_core::error::NodegetError;
 use ng_core::permission::data_structure::{MonitoringUuid, NodeGet, Permission, Scope};
 use ng_core::utils::get_local_timestamp_ms_i64;
+use ng_db::rpc::to_rpc_error;
 use ng_token::{TokenOrAuth, check_super_token, get_token};
 use serde::Serialize;
 use serde_json::value::RawValue;
@@ -77,14 +78,7 @@ pub async fn list_all_agent_uuid(token: String) -> RpcResult<Box<RawValue>> {
 
     match process_logic.await {
         Ok(result) => Ok(result),
-        Err(e) => {
-            let nodeget_err = ng_core::error::anyhow_to_nodeget_error(&e);
-            Err(jsonrpsee::types::ErrorObject::owned(
-                nodeget_err.error_code() as i32,
-                format!("{nodeget_err}"),
-                None::<()>,
-            ))
-        }
+        Err(e) => Err(to_rpc_error(&e)),
     }
 }
 

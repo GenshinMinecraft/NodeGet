@@ -6,8 +6,7 @@
 use crate::query::QueryCondition;
 use crate::rpc::agent::AgentRpcImpl;
 use crate::rpc::agent::delete_common::{
-    apply_resolved_conditions, extract_limit_and_last, resolve_conditions,
-    scopes_from_conditions,
+    apply_resolved_conditions, extract_limit_and_last, resolve_conditions, scopes_from_conditions,
 };
 use jsonrpsee::core::RpcResult;
 use ng_core::error::NodegetError;
@@ -16,7 +15,8 @@ use ng_core::permission::permission_checker::require_permission_checker;
 use ng_core::permission::token_auth::TokenOrAuth;
 use ng_db::entity::dynamic_monitoring_summary;
 use ng_infra::server::RpcHelper;
-use sea_orm::{ColumnTrait, EntityTrait, ExprTrait, QueryFilter, QueryOrder, QuerySelect};
+use ng_infra::server::to_rpc_error;
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
 use serde_json::value::RawValue;
 use tracing::{debug, error, warn};
 
@@ -136,13 +136,6 @@ pub async fn delete_dynamic_summary(
 
     match process_logic.await {
         Ok(result) => Ok(result),
-        Err(e) => {
-            let nodeget_err = ng_core::error::anyhow_to_nodeget_error(&e);
-            Err(jsonrpsee::types::ErrorObject::owned(
-                nodeget_err.error_code() as i32,
-                format!("{nodeget_err}"),
-                None::<()>,
-            ))
-        }
+        Err(e) => Err(to_rpc_error(&e)),
     }
 }

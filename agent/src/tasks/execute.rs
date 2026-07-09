@@ -83,12 +83,8 @@ pub async fn execute_command(task: ExecuteTask) -> Result<String> {
     //（60s）约束，不会无限。
     let max_capture = u64::try_from(max_chars).unwrap_or(u64::MAX);
 
-    let read_stdout = async {
-        read_capped(stdout_pipe.as_mut(), max_capture).await
-    };
-    let read_stderr = async {
-        read_capped(stderr_pipe.as_mut(), max_capture).await
-    };
+    let read_stdout = async { read_capped(stdout_pipe.as_mut(), max_capture).await };
+    let read_stderr = async { read_capped(stderr_pipe.as_mut(), max_capture).await };
 
     let wait_and_collect = async {
         let (status, out, err) = tokio::join!(child.wait(), read_stdout, read_stderr);

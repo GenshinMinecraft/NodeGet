@@ -9,6 +9,7 @@ use ng_core::permission::token_auth::TokenOrAuth;
 use ng_core::utils::generate_random_string;
 use ng_db::entity::task;
 use ng_db::rpc::RpcHelper;
+use ng_db::rpc::to_rpc_error;
 use sea_orm::{ActiveValue, EntityTrait, Set};
 use serde_json::value::RawValue;
 use std::sync::Arc;
@@ -141,7 +142,9 @@ pub async fn create_task(
                 error!(target: "task", error = %e.1, "Error sending task event");
                 let mut msg = format!("Error sending task event: {}", e.1);
                 if rollback_failed {
-                    msg.push_str("; rollback also failed, see logs (task row may need manual cleanup)");
+                    msg.push_str(
+                        "; rollback also failed, see logs (task row may need manual cleanup)",
+                    );
                 }
                 Err(NodegetError::AgentConnectionError(msg).into())
             }
@@ -150,13 +153,6 @@ pub async fn create_task(
 
     match process_logic.await {
         Ok(result) => Ok(result),
-        Err(e) => {
-            let nodeget_err = ng_core::error::anyhow_to_nodeget_error(&e);
-            Err(jsonrpsee::types::ErrorObject::owned(
-                nodeget_err.error_code() as i32,
-                format!("{nodeget_err}"),
-                None::<()>,
-            ))
-        }
+        Err(e) => Err(to_rpc_error(&e)),
     }
 }

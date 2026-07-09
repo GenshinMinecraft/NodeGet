@@ -6,6 +6,7 @@ use jsonrpsee::core::RpcResult;
 use ng_core::error::NodegetError;
 use ng_core::permission::create::TokenCreationRequest;
 use ng_core::permission::token_auth::TokenOrAuth;
+use ng_infra::server::to_rpc_error;
 use serde_json::value::RawValue;
 use tracing::debug;
 
@@ -54,13 +55,6 @@ pub async fn create(
     // 统一错误转换：anyhow → NodegetError → JSON-RPC ErrorObject
     match process_logic.await {
         Ok(result) => Ok(result),
-        Err(e) => {
-            let nodeget_err = ng_core::error::anyhow_to_nodeget_error(&e);
-            Err(jsonrpsee::types::ErrorObject::owned(
-                nodeget_err.error_code() as i32,
-                format!("{nodeget_err}"),
-                None::<()>,
-            ))
-        }
+        Err(e) => Err(to_rpc_error(&e)),
     }
 }

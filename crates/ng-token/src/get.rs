@@ -88,11 +88,7 @@ pub async fn get_token(token_or_auth: &TokenOrAuth) -> anyhow::Result<Token> {
         timestamp_from: cached_token.model.time_stamp_from,
         timestamp_to: cached_token.model.time_stamp_to,
         token_limit: Arc::clone(&cached_token.parsed_limits),
-        username: cached_token
-            .model
-            .username
-            .as_deref()
-            .map(|u| Arc::from(u)),
+        username: cached_token.model.username.as_deref().map(Arc::from),
     })
 }
 
@@ -130,11 +126,7 @@ pub async fn get_token_by_key_or_username(identifier: &str) -> anyhow::Result<To
         timestamp_from: cached_token.model.time_stamp_from,
         timestamp_to: cached_token.model.time_stamp_to,
         token_limit: Arc::clone(&cached_token.parsed_limits),
-        username: cached_token
-            .model
-            .username
-            .as_deref()
-            .map(|u| Arc::from(u)),
+        username: cached_token.model.username.as_deref().map(Arc::from),
     })
 }
 

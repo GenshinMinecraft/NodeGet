@@ -7,6 +7,7 @@ use crate::service::{enqueue_defined_js_worker_run, enqueue_source_js_worker_run
 use jsonrpsee::core::RpcResult;
 use ng_core::error::NodegetError;
 use ng_core::permission::data_structure::JsWorker as JsWorkerPermission;
+use ng_infra::server::to_rpc_error;
 use ng_js_runtime::{CompileMode, RunType};
 use serde_json::Value;
 use serde_json::value::RawValue;
@@ -72,13 +73,6 @@ pub async fn run(
 
     match process_logic.await {
         Ok(result) => Ok(result),
-        Err(e) => {
-            let nodeget_err = ng_core::error::anyhow_to_nodeget_error(&e);
-            Err(jsonrpsee::types::ErrorObject::owned(
-                nodeget_err.error_code() as i32,
-                format!("{nodeget_err}"),
-                None::<()>,
-            ))
-        }
+        Err(e) => Err(to_rpc_error(&e)),
     }
 }

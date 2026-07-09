@@ -3,11 +3,12 @@
 use crate::rpc::crontab::CrontabRpcImpl;
 use crate::server_cron::delete_crontab_by_name;
 use jsonrpsee::core::RpcResult;
-use ng_core::error::{NodegetError, anyhow_to_nodeget_error};
+use ng_core::error::NodegetError;
 use ng_core::permission::data_structure::{Crontab as CrontabPermission, Permission};
 use ng_core::permission::token_auth::TokenOrAuth;
 use ng_db::entity::crontab;
 use ng_infra::server::RpcHelper;
+use ng_infra::server::to_rpc_error;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde_json::value::RawValue;
 use tracing::{debug, warn};
@@ -77,13 +78,6 @@ pub async fn delete(token: String, name: String) -> RpcResult<Box<RawValue>> {
 
     match process_logic.await {
         Ok(result) => Ok(result),
-        Err(e) => {
-            let nodeget_err = anyhow_to_nodeget_error(&e);
-            Err(jsonrpsee::types::ErrorObject::owned(
-                nodeget_err.error_code() as i32,
-                format!("{nodeget_err}"),
-                None::<()>,
-            ))
-        }
+        Err(e) => Err(to_rpc_error(&e)),
     }
 }

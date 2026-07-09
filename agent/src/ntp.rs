@@ -76,7 +76,9 @@ pub async fn fetch_ntp_offset(ntp_server: &str) -> i64 {
                 return offset_ms;
             }
             Err((addr, msg)) => {
-                warn!("NTP probe failed for {ntp_server} ({addr}): {msg}; waiting for other addresses");
+                warn!(
+                    "NTP probe failed for {ntp_server} ({addr}): {msg}; waiting for other addresses"
+                );
             }
         }
     }
@@ -93,7 +95,11 @@ pub async fn fetch_ntp_offset(ntp_server: &str) -> i64 {
 async fn probe_ntp_addr(
     addr: std::net::SocketAddr,
 ) -> Result<(std::net::SocketAddr, i64), (std::net::SocketAddr, String)> {
-    let bind_addr = if addr.is_ipv4() { "0.0.0.0:0" } else { "[::]:0" };
+    let bind_addr = if addr.is_ipv4() {
+        "0.0.0.0:0"
+    } else {
+        "[::]:0"
+    };
     let socket = UdpSocket::bind(bind_addr).await.map_err(|e| {
         (
             addr,
@@ -102,7 +108,12 @@ async fn probe_ntp_addr(
     })?;
 
     let context = NtpContext::new(StdTimestampGen::default());
-    match timeout(NTP_TIMEOUT, get_time(addr, &UdpSocketWrapper::from(socket), context)).await {
+    match timeout(
+        NTP_TIMEOUT,
+        get_time(addr, &UdpSocketWrapper::from(socket), context),
+    )
+    .await
+    {
         Ok(Ok(time)) => Ok((addr, time.offset())),
         Ok(Err(e)) => Err((addr, format!("request error: {e:?}"))),
         Err(_) => Err((addr, format!("timed out after {}s", NTP_TIMEOUT.as_secs()))),

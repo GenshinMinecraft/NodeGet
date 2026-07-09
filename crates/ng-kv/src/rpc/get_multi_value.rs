@@ -5,7 +5,8 @@ use crate::db::{get_kv_store_optional, get_v_from_kv_lenient};
 use crate::rpc::KvValueItem;
 use crate::rpc::NamespaceKeyItem;
 use jsonrpsee::core::RpcResult;
-use ng_core::error::{NodegetError, anyhow_to_nodeget_error};
+use ng_core::error::NodegetError;
+use ng_infra::server::to_rpc_error;
 use serde_json::Value;
 use serde_json::value::RawValue;
 use std::collections::HashMap;
@@ -133,13 +134,6 @@ pub async fn get_multi_value(
 
     match process_logic.await {
         Ok(result) => Ok(result),
-        Err(e) => {
-            let nodeget_err = anyhow_to_nodeget_error(&e);
-            Err(jsonrpsee::types::ErrorObject::owned(
-                nodeget_err.error_code() as i32,
-                format!("{nodeget_err}"),
-                None::<()>,
-            ))
-        }
+        Err(e) => Err(to_rpc_error(&e)),
     }
 }

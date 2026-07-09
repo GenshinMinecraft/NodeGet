@@ -8,10 +8,11 @@
 use crate::CronType;
 use crate::cache::CrontabCache;
 use jsonrpsee::core::RpcResult;
-use ng_core::error::{NodegetError, anyhow_to_nodeget_error};
+use ng_core::error::NodegetError;
 use ng_core::permission::data_structure::{Crontab as CrontabPermission, Permission, Scope, Token};
 use ng_core::permission::token_auth::TokenOrAuth;
 use ng_core::utils::get_local_timestamp_ms_i64;
+use ng_infra::server::to_rpc_error;
 use ng_token::{check_super_token, get_token};
 use serde_json::value::RawValue;
 use std::collections::HashSet;
@@ -103,14 +104,7 @@ pub async fn get(token: String) -> RpcResult<Box<RawValue>> {
 
     match process_logic.await {
         Ok(result) => Ok(result),
-        Err(e) => {
-            let nodeget_err = anyhow_to_nodeget_error(&e);
-            Err(jsonrpsee::types::ErrorObject::owned(
-                nodeget_err.error_code() as i32,
-                format!("{nodeget_err}"),
-                None::<()>,
-            ))
-        }
+        Err(e) => Err(to_rpc_error(&e)),
     }
 }
 

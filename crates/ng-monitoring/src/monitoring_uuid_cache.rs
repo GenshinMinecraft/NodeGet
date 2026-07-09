@@ -59,15 +59,17 @@ fn recover_write(
 /// 根治需破坏性迁移把三表 `uuid_id` 列改为 `integer`(i32) 并改全链路类型（见 REVIEW H1）；
 /// 在此之前，checked conversion 至少防止静默回绕。
 fn try_id_i16(model_id: i32) -> Option<i16> {
-    i16::try_from(model_id).map_err(|_| {
-        tracing::error!(
-            target: "monitoring_uuid_cache",
-            model_id,
-            "monitoring_uuid.id exceeds i16 range ({}); skipping to avoid silent wraparound. \
-             Root fix: migrate uuid_id columns to integer (i32). See REVIEW H1.",
-            model_id
-        );
-    }).ok()
+    i16::try_from(model_id)
+        .map_err(|_| {
+            tracing::error!(
+                target: "monitoring_uuid_cache",
+                model_id,
+                "monitoring_uuid.id exceeds i16 range ({}); skipping to avoid silent wraparound. \
+                 Root fix: migrate uuid_id columns to integer (i32). See REVIEW H1.",
+                model_id
+            );
+        })
+        .ok()
 }
 
 // 通过 make_global_cache! 宏生成 init() / global() / reload() 全局单例方法

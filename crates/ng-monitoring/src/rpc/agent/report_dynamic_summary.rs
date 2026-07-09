@@ -14,6 +14,7 @@ use ng_core::permission::data_structure::{DynamicMonitoringSummary, Permission, 
 use ng_core::permission::token_auth::TokenOrAuth;
 use ng_core::utils::get_local_timestamp_ms_i64;
 use ng_db::entity::dynamic_monitoring_summary;
+use ng_infra::server::to_rpc_error;
 use ng_token::get::check_token_limit;
 use sea_orm::{ActiveValue, Set};
 use serde_json::value::RawValue;
@@ -102,10 +103,9 @@ pub async fn report_dynamic_summary(
 
         debug!(target: "monitoring", agent_uuid = %data.uuid, "Received dynamic summary data, sending to buffer");
 
-        monitoring_buffer::with_buffers(|b| b.dynamic_summary.send(in_data))
-            .ok_or_else(|| {
-                NodegetError::ConfigNotFound("MonitoringBuffers not initialized".to_owned())
-            })?;
+        monitoring_buffer::with_buffers(|b| b.dynamic_summary.send(in_data)).ok_or_else(|| {
+            NodegetError::ConfigNotFound("MonitoringBuffers not initialized".to_owned())
+        })?;
 
         MonitoringLastCache::global()
             .ok_or_else(|| {
@@ -129,13 +129,6 @@ pub async fn report_dynamic_summary(
 
     match process_logic.await {
         Ok(result) => Ok(result),
-        Err(e) => {
-            let nodeget_err = ng_core::error::anyhow_to_nodeget_error(&e);
-            Err(jsonrpsee::types::ErrorObject::owned(
-                nodeget_err.error_code() as i32,
-                format!("{nodeget_err}"),
-                None::<()>,
-            ))
-        }
+        Err(e) => Err(to_rpc_error(&e)),
     }
 }

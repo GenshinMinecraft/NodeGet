@@ -18,8 +18,10 @@ impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         let db = manager.get_connection();
         // 两后端：先把存量 NULL 填为 true（清除历史 NULL 数据）
-        db.execute_unprepared("UPDATE \"static_file\" SET \"enable\" = true WHERE \"enable\" IS NULL")
-            .await?;
+        db.execute_unprepared(
+            "UPDATE \"static_file\" SET \"enable\" = true WHERE \"enable\" IS NULL",
+        )
+        .await?;
         // PostgreSQL：收紧为 NOT NULL（SQLite 因 ALTER 限制跳过，靠 app 层保证）
         if matches!(manager.get_database_backend(), DbBackend::Postgres) {
             db.execute_unprepared(

@@ -34,7 +34,10 @@ pub const MAX_QUERY_LIMIT: u64 = 10_000;
 /// 与 `MAX_QUERY_LIMIT` 值相同但语义独立：`MAX_QUERY_LIMIT` 钳制客户端传入的 `Limit`
 /// 参数（ORM select 路径）；本常量截断任意用户 SQL（raw 路径，可能含无 LIMIT 全表扫描/
 /// RETURNING/CTE）的结果集。二者独立，避免将来放宽其一波及另一类 RPC。
-#[expect(clippy::cast_possible_truncation, reason = "value is a small compile-time constant")]
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "value is a small compile-time constant"
+)]
 pub const EXEC_SQL_RESULT_TRUNCATE_LIMIT: usize = MAX_QUERY_LIMIT as usize;
 
 /// 结果类查询（task / js_result / crontab_result）的默认返回行数（客户端未指定 Limit 时）。

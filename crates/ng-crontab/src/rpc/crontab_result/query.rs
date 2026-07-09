@@ -2,10 +2,11 @@
 
 use crate::query::{CrontabResultDataQuery, CrontabResultQueryCondition};
 use jsonrpsee::core::RpcResult;
-use ng_core::error::{NodegetError, anyhow_to_nodeget_error};
+use ng_core::error::NodegetError;
 use ng_core::utils::MAX_QUERY_LIMIT;
 use ng_db::entity::crontab_result;
 use ng_db::get_db;
+use ng_infra::server::to_rpc_error;
 use sea_orm::{ColumnTrait, EntityTrait, ExprTrait, QueryFilter, QueryOrder, QuerySelect};
 use serde_json::value::RawValue;
 use std::collections::HashSet;
@@ -127,13 +128,6 @@ pub async fn query(token: String, query: CrontabResultDataQuery) -> RpcResult<Bo
 
     match process_logic.await {
         Ok(result) => Ok(result),
-        Err(e) => {
-            let nodeget_err = anyhow_to_nodeget_error(&e);
-            Err(jsonrpsee::types::ErrorObject::owned(
-                nodeget_err.error_code() as i32,
-                format!("{nodeget_err}"),
-                None::<()>,
-            ))
-        }
+        Err(e) => Err(to_rpc_error(&e)),
     }
 }

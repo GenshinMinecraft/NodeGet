@@ -160,7 +160,9 @@ impl DbRegistryManager {
                     if conn.get_database_backend() == sea_orm::DatabaseBackend::Sqlite {
                         // auto_vacuum 必须在库为空（建库阶段）设置才生效，老库会被忽略。
                         // 新子库已在 create_conn 时设过；此处兜底，确保任何首次连接都尝试设一次。
-                        let _ = conn.execute_unprepared("PRAGMA auto_vacuum = INCREMENTAL;").await;
+                        let _ = conn
+                            .execute_unprepared("PRAGMA auto_vacuum = INCREMENTAL;")
+                            .await;
                         let _ = conn.execute_unprepared("PRAGMA journal_mode=WAL;").await;
                         let _ = conn.execute_unprepared("PRAGMA synchronous=NORMAL;").await;
                         let _ = conn.execute_unprepared("PRAGMA busy_timeout = 5000;").await;
@@ -472,7 +474,11 @@ impl DbRegistryManager {
     pub async fn shutdown(&self) {
         self.cancelled.store(true, Ordering::SeqCst);
         self.cancel_notify.notify_one();
-        let handle = self.cleanup_handle.lock().unwrap_or_else(std::sync::PoisonError::into_inner).take();
+        let handle = self
+            .cleanup_handle
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
         if let Some(handle) = handle {
             match tokio::time::timeout(std::time::Duration::from_secs(5), handle).await {
                 Ok(Ok(())) => info!(target: "db", "DbRegistry cleanup loop exited cleanly"),
