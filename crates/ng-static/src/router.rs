@@ -512,6 +512,7 @@ fn build_webdav_auth_required() -> axum::response::Response {
             axum::http::header::WWW_AUTHENTICATE,
             "Basic realm=\"NodeGet Static WebDAV\"",
         )
+        .header("X-Content-Type-Options", "nosniff")
         .body(axum::body::Body::from("Authentication required"))
         .expect("Failed to build response")
 }
@@ -524,6 +525,7 @@ fn build_webdav_error(status: StatusCode, message: impl Into<String>) -> axum::r
             axum::http::header::CONTENT_TYPE,
             "text/plain; charset=utf-8",
         )
+        .header("X-Content-Type-Options", "nosniff")
         .body(axum::body::Body::from(message.into()))
         .expect("Failed to build response")
 }
@@ -539,6 +541,7 @@ fn build_http_error(
             axum::http::header::CONTENT_TYPE,
             "text/plain; charset=utf-8",
         )
+        .header("X-Content-Type-Options", "nosniff")
         .body(jsonrpsee::server::HttpBody::from(message.into()))
         .expect("Failed to build error response")
 }
@@ -552,7 +555,7 @@ fn build_static_error(
     let mut builder = axum::http::Response::builder().status(status).header(
         axum::http::header::CONTENT_TYPE,
         "text/plain; charset=utf-8",
-    );
+    ).header("X-Content-Type-Options", "nosniff");
     if cors {
         builder = builder.header(axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*");
     }

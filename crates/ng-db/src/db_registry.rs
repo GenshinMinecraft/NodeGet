@@ -312,16 +312,12 @@ impl DbRegistryManager {
     ///
     /// 内部步骤：
     /// 1. 构造 `SQLite` URL 并连接（自动启用 WAL 等优化）
-    /// 2. 若 `db_registry` 中无记录则插入新行，否则递增 `db_connections` 计数
+    /// 2. 同步 `db_registry` 表：无记录则插入新行，已有记录则按需更新 `max_lifetime_ms`
     /// 3. 将连接加入内存池并记录最后使用时间
     ///
     /// # Errors
     ///
     /// 当 `SQLite` 连接失败或 `db_registry` 表操作失败时返回错误
-    ///
-    /// # Panics
-    ///
-    /// 若 `existing` 在 `else` 分支中为 `None`（逻辑上不应发生）时会 panic
     pub async fn create_conn(
         &self,
         name: &str,

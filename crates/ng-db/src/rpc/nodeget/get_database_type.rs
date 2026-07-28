@@ -9,13 +9,13 @@ use sea_orm::DbBackend;
 use serde_json::value::RawValue;
 use tracing::warn;
 
-/// 查询主库数据库类型，需要 `NodeGet::ExecSql` 权限（复用该权限，Global 作用域）
+/// 查询主库数据库类型，需要 `NodeGet::GetDatabaseType` 权限（Global 作用域）
 ///
 /// - `token` — 认证 Token
 /// - 返回值：`{"success": true, "data": "sqlite"|"postgres"|"mysql"|"unknown"}`
 ///
 /// 内部步骤：
-/// 1. 解析 Token 并检查 `NodeGet::ExecSql` 权限
+/// 1. 解析 Token 并检查 `NodeGet::GetDatabaseType` 权限
 /// 2. 从全局单例获取主库连接
 /// 3. 根据 `get_database_backend()` 返回数据库类型字符串
 ///
