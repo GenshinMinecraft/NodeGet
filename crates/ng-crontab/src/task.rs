@@ -60,7 +60,7 @@ pub fn js_worker_scheduler() -> Option<&'static std::sync::Arc<dyn JsWorkerSched
 /// 向指定 Agent UUID 列表批量下发定时任务。
 ///
 /// 1. 一次性序列化 `task_event_type`，批量构建所有 task ActiveModel
-/// 2. 单次 `insert_many` 写入 task 记录，从 `last_insert_id` 推算连续 ID
+/// 2. 单次 `insert_many` + `exec_with_returning` 写入 task 记录，用 RETURNING 取回每行真实 id
 /// 3. 并发发送 TaskEvent 到各 Agent（JoinSet 替代逐个 await）
 /// 4. 批量回滚发送失败的 task 记录
 /// 5. 单次 `insert_many` 写入 crontab_result
@@ -118,13 +118,11 @@ pub async fn crontab_task(
             }
         };
 
-        // 批量构建 task ActiveModel
-        let mut tokens: Vec<String> = Vec::with_capacity(agent_count);
+        // 批量构建 task ActiveModel（每个 uuid 一条，token 各自随机）
         let task_models: Vec<task::ActiveModel> = uuids
             .iter()
             .map(|uuid| {
                 let token = generate_random_string(10);
-                tokens.push(token.clone());
                 task::ActiveModel {
                     id: ActiveValue::default(),
                     uuid: Set(*uuid),
@@ -139,39 +137,39 @@ pub async fn crontab_task(
             })
             .collect();
 
-        // 批量 INSERT（单次 DB 往返），auto-increment 保证 ID 连续
-        let insert_result = match task::Entity::insert_many(task_models).exec(db).await {
-            Ok(r) => r,
+        // 批量 INSERT 并用 RETURNING 取回每行的真实 Model。
+        // ⚠️ 不能用 `last_insert_id` 反推连续区间：PostgreSQL 的 IDENTITY 序列 nextval 按行原子
+        // 分配，并发 insert_many（多个 cron 同 tick、cron 与 task.create 并发）会让本批拿到的 id
+        // 交错（如本批得 100/102/104），`base_id = last_id - (n-1)` 会把属于别的批次的 id 当作
+        // 本批任务下发，导致 task_id+uuid+token 错配（详见 upload_task_result 三元组校验）。
+        // RETURNING 按 VALUES 顺序返回每行 DB 实际分配的 id，直接按下标配对，PG/SQLite 均正确。
+        let inserted = match task::Entity::insert_many(task_models)
+            .exec_with_returning(db)
+            .await
+        {
+            Ok(models) => models,
             Err(e) => {
                 error!(target: "crontab", error = %e, "batch task insert error");
                 return;
             }
         };
 
-        // 从 last_insert_id 推算连续 task_id，无需额外 SELECT
-        let last_id = match insert_result.last_insert_id {
-            Some(id) => id,
-            None => {
-                error!(target: "crontab", "batch insert returned no last_insert_id");
-                return;
-            }
-        };
-        let base_id = last_id - (agent_count as i64 - 1);
+        // 从 RETURNING 的 Models 派生每条任务的派发三元组（真实 id + uuid + token）。
+        // inserted 与 uuids 同序（写入顺序 == VALUES 顺序 == RETURNING 顺序）。
+        let dispatch = pair_task_ids(&inserted);
 
-        // 并发发送任务事件
+        // 并发发送任务事件（dispatch 中每个元组的 task_id 均为 DB 真实 id）
         let manager = TaskManager::global();
         let mut send_set = JoinSet::new();
 
-        for (i, uuid) in uuids.iter().enumerate() {
-            let task_id = base_id + i as i64;
+        for (task_id, uuid, token) in dispatch {
             let task = TaskEvent {
-                task_id: task_id.cast_unsigned(),
-                task_token: tokens[i].clone(),
+                task_id,
+                task_token: token,
                 task_event_type: task_event_type.clone(),
             };
-            let uuid = *uuid;
             send_set.spawn(async move {
-                (uuid, task_id, manager.send_event(uuid, task).await)
+                (uuid, task_id.cast_signed(), manager.send_event(uuid, task).await)
             });
         }
 
@@ -249,4 +247,113 @@ pub async fn crontab_task(
     }
         .instrument(span)
         .await;
+}
+
+/// 从 `insert_many(...).exec_with_returning()` 返回的 Models 派生每条任务的派发三元组：
+/// DB 真实 id、目标 agent uuid、token。
+///
+/// 关键不变量：每个 `model.id` 是 DB 实际分配的值，**不假设** id 在批次内连续。
+/// PostgreSQL 的 IDENTITY 序列在并发 `insert_many` 下会按行交错分配 id（如本批得
+/// `100/102/104`），故绝不能用 `last_insert_id - (n-1)` 反推区间——必须用 RETURNING
+/// 的真实 id 按写入顺序配对。
+///
+/// RETURNING 行顺序 == VALUES 写入顺序 == `task_models` 构建顺序 == `uuids` 顺序，
+/// 因此 `dispatch[i]` 对应 `uuids[i]`。
+fn pair_task_ids(models: &[task::Model]) -> Vec<(u64, Uuid, String)> {
+    models
+        .iter()
+        .map(|m| (m.id.cast_unsigned(), m.uuid, m.token.clone()))
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pair_task_ids;
+    use ng_db::entity::task;
+    use sea_orm::entity::prelude::*;
+    use uuid::Uuid;
+
+    /// 构造一个最小可用的 task::Model，仅关心测试用到的字段（id/uuid/token）。
+    fn make_model(id: i64, uuid: Uuid, token: &str) -> task::Model {
+        task::Model {
+            id,
+            uuid,
+            token: token.to_owned(),
+            cron_source: None,
+            timestamp: None,
+            success: None,
+            error_message: None,
+            task_event_type: Json::Null,
+            task_event_result: None,
+        }
+    }
+
+    /// 复刻 PostgreSQL 并发交错场景：本批 RETURNING 回来的 id 非连续（100/102/104）。
+    /// 旧的反推逻辑 `base_id = last_id - (n-1)` 在此输入下会算出 102/103/104，
+    /// 把属于别的批次的 103 当作本批任务下发；本测试证明修复后配对与真实 id 一一对应。
+    #[test]
+    fn pair_task_ids_interleaved_non_contiguous_ids() {
+        let u1 = Uuid::nil();
+        let u2 = Uuid::from_u128(2);
+        let u3 = Uuid::from_u128(3);
+        let models = vec![
+            make_model(100, u1, "t1"),
+            make_model(102, u2, "t2"),
+            make_model(104, u3, "t3"),
+        ];
+
+        let dispatch = pair_task_ids(&models);
+
+        assert_eq!(dispatch.len(), 3);
+        // 每个 task_id 必须等于对应 model 的真实 id（不连续也正确配对）
+        assert_eq!(dispatch[0], (100, u1, "t1".to_owned()));
+        assert_eq!(dispatch[1], (102, u2, "t2".to_owned()));
+        assert_eq!(dispatch[2], (104, u3, "t3".to_owned()));
+    }
+
+    /// 返回顺序与输入顺序严格一致（写入顺序 == 下发顺序，不发生移位）。
+    #[test]
+    fn pair_task_ids_preserves_order() {
+        let ids = [7_i64, 3, 12, 1, 9];
+        let models: Vec<task::Model> = ids
+            .iter()
+            .enumerate()
+            .map(|(i, &id)| make_model(id, Uuid::from_u128(i as u128), &format!("tok{i}")))
+            .collect();
+
+        let dispatch = pair_task_ids(&models);
+
+        assert_eq!(
+            dispatch.iter().map(|(id, _, _)| *id).collect::<Vec<_>>(),
+            vec![7_u64, 3, 12, 1, 9]
+        );
+        assert_eq!(
+            dispatch.iter().map(|(_, _, t)| t.as_str()).collect::<Vec<_>>(),
+            vec!["tok0", "tok1", "tok2", "tok3", "tok4"]
+        );
+    }
+
+    #[test]
+    fn pair_task_ids_empty() {
+        assert!(pair_task_ids(&[]).is_empty());
+    }
+
+    #[test]
+    fn pair_task_ids_single() {
+        let uuid = Uuid::nil();
+        let models = vec![make_model(42, uuid, "solo")];
+        let dispatch = pair_task_ids(&models);
+        assert_eq!(dispatch, vec![(42, uuid, "solo".to_owned())]);
+    }
+
+    /// 长度守恒：N 个 model → N 个元组。
+    #[test]
+    fn pair_task_ids_length_conservation() {
+        for n in [1_usize, 2, 5, 50] {
+            let models: Vec<task::Model> = (0..n)
+                .map(|i| make_model(i as i64, Uuid::from_u128(i as u128), "x"))
+                .collect();
+            assert_eq!(pair_task_ids(&models).len(), n);
+        }
+    }
 }
