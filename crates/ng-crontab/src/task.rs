@@ -356,4 +356,96 @@ mod tests {
             assert_eq!(pair_task_ids(&models).len(), n);
         }
     }
+
+    /// SQLite 端到端回归测试：`insert_many(...).exec_with_returning()` 在 SQLite 下必须成功
+    /// 返回每行真实 Model，而非 `BackendNotSupported`。
+    ///
+    /// 背景：sea-orm 的 `exec_with_returning` 仅在 `sqlite-use-returning-for-3_35` feature 启用
+    /// 时对 SQLite 走 RETURNING；未启用则直接返回 `Err(BackendNotSupported { Sqlite })`，导致
+    /// `crontab_task` 在 SQLite（文档化默认后端）下静默丢弃整批任务。本测试用内存 SQLite 实跑，
+    /// 锁定该 feature 必须启用——若有人误删 Cargo.toml 里的 feature，此测试会失败。
+    /// （之前的纯函数测试不连 DB，测不到这条 sea-orm 路径，是该 blocker 漏网的原因。）
+    #[tokio::test]
+    async fn insert_many_exec_with_returning_works_on_sqlite() {
+        use sea_orm::{ActiveValue, ConnectionTrait, Database, FromQueryResult, Set, Statement};
+
+        let db = Database::connect("sqlite::memory:").await.expect("connect in-memory sqlite");
+
+        // 运行时 SQLite 版本必须 ≥ 3.35（RETURNING 子句最低要求）。
+        // sqlx 的 `sqlite` feature 默认带 bundled，理论上捆绑 3.50.x；此处实跑确认，
+        // 排除「链接到系统旧版 SQLite < 3.35 导致 RETURNING 运行时失败」的风险。
+        #[derive(FromQueryResult)]
+        struct VersionRow {
+            v: String,
+        }
+        let ver = VersionRow::find_by_statement(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Sqlite,
+            "SELECT sqlite_version() AS v",
+            [],
+        ))
+        .one(&db)
+        .await
+        .expect("query sqlite_version")
+        .expect("version row");
+        let (major, minor) = {
+            let mut it = ver.v.split('.');
+            (
+                it.next().and_then(|s| s.parse::<u32>().ok()).unwrap_or(0),
+                it.next().and_then(|s| s.parse::<u32>().ok()).unwrap_or(0),
+            )
+        };
+        let ver_str = ver.v.clone();
+        assert!(
+            (major, minor) >= (3, 35),
+            "运行时 SQLite {ver_str} < 3.35，RETURNING 不可用；确认启用了 sqlx bundled",
+        );
+
+        // 建最小 task 表（列对齐 task entity；id 自增主键）
+        db.execute_unprepared(
+            r#"CREATE TABLE "task" (
+                "id" integer PRIMARY KEY AUTOINCREMENT,
+                "uuid" blob NOT NULL,
+                "token" text NOT NULL,
+                "cron_source" text,
+                "timestamp" bigint,
+                "success" boolean,
+                "error_message" text,
+                "task_event_type" blob NOT NULL,
+                "task_event_result" blob
+            )"#,
+        )
+        .await
+        .expect("create task table");
+
+        // 批量插入 50 行（较大批量，排除「批量+RETURNING」的驱动边角 bug），用 RETURNING 拿回真实 Model
+        const N: i64 = 50;
+        let models: Vec<task::ActiveModel> = (0..N)
+            .map(|i| task::ActiveModel {
+                id: ActiveValue::default(),
+                uuid: Set(Uuid::from_u128(i as u128)),
+                token: Set(format!("tok{i}")),
+                cron_source: Set(None),
+                timestamp: Set(None),
+                success: Set(None),
+                error_message: Set(None),
+                task_event_type: Set(serde_json::Value::Null),
+                task_event_result: Set(None),
+            })
+            .collect();
+
+        let inserted = task::Entity::insert_many(models)
+            .exec_with_returning(&db)
+            .await
+            .expect("exec_with_returning must succeed on SQLite (sqlite-use-returning-for-3_35 feature)");
+
+        // 返回行数 == 插入数；id 由 DB 分配（连续与否不重要，关键是真实回读）
+        assert_eq!(inserted.len() as i64, N, "RETURNING 应返回全部 {N} 行");
+        let ids: Vec<i64> = inserted.iter().map(|m| m.id).collect();
+        assert_eq!(ids, (1..=N).collect::<Vec<_>>(), "SQLite 单条多值 INSERT rowid 连续递增");
+        // token 顺序与写入一致（dispatch[i] ↔ uuids[i] 配对正确性）
+        assert_eq!(
+            inserted.iter().map(|m| m.token.as_str()).collect::<Vec<_>>(),
+            (0..N).map(|i| format!("tok{i}")).collect::<Vec<_>>()
+        );
+    }
 }

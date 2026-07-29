@@ -58,7 +58,7 @@ NodeGet/
 ├── crates/
 │   ├── ng-core/           # Errors, version, utils, NameValidator, Token/Scope/Permission/Limit/TokenOrAuth, PermissionChecker
 │   ├── ng-db/             # Entities (13 tables), DB connection global, DbRegistry, db RPC
-│   │   └── migration/     #   SeaORM migrations (19 steps)
+│   │   └── migration/     #   SeaORM migrations (22 steps)
 │   ├── ng-infra/          # DbBackedCache + make_global_cache!, rpc_exec!, RpcHelper, token_identity
 │   ├── ng-config/         # ServerConfig, AgentConfig, CLI args, global config, read/edit_config RPC
 │   ├── ng-monitoring/     # Monitoring data structures, caches (UUID/Last/StaticHash), buffer, agent/agent-uuid RPC
