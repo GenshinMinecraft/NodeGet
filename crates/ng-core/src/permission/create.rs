@@ -15,6 +15,8 @@ pub struct TokenCreationRequest {
     pub timestamp_from: Option<i64>,
     /// Token 有效期截止时间（Unix 毫秒，可选）
     pub timestamp_to: Option<i64>,
+    /// Token 版本号，用于区分不同颁发策略
+    pub version: Option<i32>,
     /// Token 的权限限制列表
     pub token_limit: Vec<Limit>,
 }
@@ -31,6 +33,7 @@ mod tests {
             password: None,
             timestamp_from: None,
             timestamp_to: None,
+            version: None,
             token_limit: vec![],
         };
         assert!(req.username.is_none());
@@ -44,6 +47,7 @@ mod tests {
             password: Some("secret".into()),
             timestamp_from: Some(1000),
             timestamp_to: Some(2000),
+            version: Some(1),
             token_limit: vec![Limit {
                 scopes: vec![Scope::Global],
                 permissions: vec![Permission::Terminal(
@@ -55,6 +59,7 @@ mod tests {
         assert_eq!(req.password.as_deref(), Some("secret"));
         assert_eq!(req.timestamp_from, Some(1000));
         assert_eq!(req.timestamp_to, Some(2000));
+        assert_eq!(req.version, Some(1));
         assert_eq!(req.token_limit.len(), 1);
     }
 
@@ -65,6 +70,7 @@ mod tests {
             password: None,
             timestamp_from: None,
             timestamp_to: None,
+            version: Some(2),
             token_limit: vec![],
         };
         let req2 = TokenCreationRequest {
@@ -72,6 +78,7 @@ mod tests {
             password: None,
             timestamp_from: None,
             timestamp_to: None,
+            version: Some(2),
             token_limit: vec![],
         };
         assert_eq!(req1, req2);
@@ -84,6 +91,7 @@ mod tests {
             password: Some("pass".into()),
             timestamp_from: Some(100),
             timestamp_to: Some(200),
+            version: Some(3),
             token_limit: vec![Limit {
                 scopes: vec![Scope::KvNamespace("ns".into())],
                 permissions: vec![Permission::Kv(crate::permission::data_structure::Kv::Read(
@@ -103,6 +111,7 @@ mod tests {
             password: None,
             timestamp_from: None,
             timestamp_to: None,
+            version: None,
             token_limit: vec![],
         };
         let d = format!("{req:?}");

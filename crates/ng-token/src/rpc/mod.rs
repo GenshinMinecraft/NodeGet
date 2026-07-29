@@ -44,7 +44,7 @@ pub trait Rpc {
     #[method(name = "create")]
     async fn create(
         &self,
-        token: String,
+        father_token: String,
         token_creation: TokenCreationRequest,
     ) -> RpcResult<Box<RawValue>>;
 
@@ -104,12 +104,12 @@ impl RpcServer for TokenRpcImpl {
 
     async fn create(
         &self,
-        token: String,
+        father_token: String,
         token_creation: TokenCreationRequest,
     ) -> RpcResult<Box<RawValue>> {
-        let (tk, un) = token_identity(&token);
+        let (tk, un) = token_identity(&father_token);
         let span = tracing::info_span!(target: "token", "token::create", token_key = tk, username = un, target_username = ?token_creation.username);
-        async { rpc_exec!(create::create(token, token_creation).await) }
+        async { rpc_exec!(create::create(father_token, token_creation).await) }
             .instrument(span)
             .await
     }
