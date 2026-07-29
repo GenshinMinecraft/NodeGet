@@ -349,7 +349,7 @@ Super Token 不受限制，可见所有 UUID。
 - `tables`: 各表名到存储大小（字节）的映射，按表名字母顺序排列
 - `total`: 所有表存储大小之和（字节）
 
-查询范围为 11 张业务表，不含 `seaql_migrations`。
+查询范围为动态发现的当前 schema 下所有用户表（不含 `seaql_migrations`），当前版本共 13 张业务表。
 
 不同数据库后端的查询方式不同:
 
@@ -738,6 +738,29 @@ curl -X POST http://127.0.0.1:2211/jsonrpc \
 - `token_key:token_secret`
 - `username|password`
 
+### ⚠️ 权限范围(SQLite 后端:等价于文件系统操作)
+
+`exec_sql` 允许执行任意 SQL,**这是设计意图,不是缺陷**——授予 `NodeGet::ExecSql` 即等于完全信任持有者。
+但授权者必须明白该权限的真实 blast radius,**远不止"读写主库数据"**:
+
+**SQLite 后端下**(默认部署):SQL 语句 `ATTACH DATABASE '任意路径' AS x; ...` 可在 **server 进程 uid 可写的任意文件系统路径**
+创建/覆盖 SQLite 文件、读取本不该访问的其他 `.db` 库。即:
+
+- **任意文件写**:在 server 可写目录投放/覆盖文件(配置、脚本、其他子库)。
+- **跨库读**:ATTACH 其他 SQLite 库后 SELECT,绕过 `db_registry` 的注册/审计/隔离。
+- **绕过路径约束**:完全绕过 [Db 命名空间](../db/index.md) 的 `validate_db_name` + `db_path` 目录限制。
+
+这是 SQLite 的固有特性(无独立权限模型,进程对文件系统的权限即数据库的权限),**不是可关闭的开关**。
+
+**PostgreSQL 后端**:PG 有独立角色/权限模型,`ATTACH PARTITION` 只能挂同集群分区、`COPY`/文件访问受
+`pg_read_server_files`/`pg_write_server_files` 预定义角色约束,故此风险面在 PG 下大幅收敛(但仍受 PG 自身权限模型约束)。
+
+**授予建议**:
+
+- 仅授予完全可信的运维/汇聚端,**永不**授予多租户场景下的普通用户。
+- **server 不要以 root 运行**;使用专用 uid 并严格限制可写目录,把 ATTACH 的危害物理限制在数据目录内。
+- 授予该权限前,等同评估"授予 server uid 的文件系统写权限"。
+
 ### 返回值
 
 统一返回以下 JSON 结构:
@@ -777,9 +800,13 @@ curl -X POST http://127.0.0.1:2211/jsonrpc \
 
 ### 权限要求
 
-- Permission: `NodeGet::ExecSql`
+- Permission: `NodeGet::GetDatabaseType`
 - Scope 行为:
     - `Global` Scope 下拥有该权限: 可返回数据库类型
+
+> **变更说明**：此前此方法复用全信任 `NodeGet::ExecSql` 权限（仅查后端类型即要求最高授权）。
+> 现拆出低特权 `NodeGet::GetDatabaseType`，遵循最小权限原则——仅需探测后端类型的运维/前端工具
+> 无需授予任意 SQL 执行权。已持有 `ExecSql` 的旧 token 不自动继承此新权限，需显式授予。
 
 `token` 支持以下格式之一:
 

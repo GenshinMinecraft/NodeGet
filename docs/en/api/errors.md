@@ -26,6 +26,9 @@ NodeGet defines a unified error enum `NodegetError` with the following error typ
 - **ParseError(String)** - Parse Error (Error Code: 101)
     - Thrown when request data parsing fails
 
+- **InvalidInput(String)** - Invalid Input (Error Code: 108)
+    - Thrown when request parameters are syntactically valid but semantically invalid
+
 - **PermissionDenied(String)** - Permission Denied (Error Code: 102)
     - Thrown when user doesn't have sufficient permissions to perform the operation
 
@@ -73,6 +76,7 @@ pub struct JsonError {
 - `105` - NotFound
 - `106` - UuidNotFound
 - `107` - ConfigNotFound
+- `108` - InvalidInput
 - `999` - Other
 
 ## Error Handling Examples

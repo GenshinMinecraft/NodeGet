@@ -1,10 +1,12 @@
 //! `task_delete` RPC 方法：按条件删除任务记录
 
+use super::escape_like_pattern;
 use crate::types::query::TaskQueryCondition;
 use jsonrpsee::core::RpcResult;
 use ng_core::error::NodegetError;
 use ng_core::permission::data_structure::{Permission, Scope, Task};
 use ng_core::permission::token_auth::TokenOrAuth;
+use ng_core::utils::MAX_QUERY_LIMIT;
 use ng_db::entity::task;
 use ng_db::rpc::RpcHelper;
 use sea_orm::sea_query::{Alias, BinOper, Expr, LikeExpr};
@@ -13,14 +15,6 @@ use sea_orm::{
 };
 use serde_json::value::RawValue;
 use tracing::{debug, error};
-
-/// 转义 SQL LIKE 特殊字符，防止注入攻击
-///
-/// SQL LIKE 中 `%` 匹配任意字符序列，`_` 匹配单个字符，
-/// 这些字符需要转义才能在 JSON 文本搜索中进行精确匹配
-fn escape_like_pattern(pattern: &str) -> String {
-    pattern.replace('%', r"\%").replace('_', r"\_")
-}
 
 /// 按条件删除任务记录
 ///
@@ -46,6 +40,8 @@ pub async fn delete(
         let token_or_auth = TokenOrAuth::from_full_token(&token)
             .map_err(|e| NodegetError::ParseError(format!("Failed to parse token: {e}")))?;
 
+        // 任务类型白名单：必须与 `TaskEventType::task_name()`（types/mod.rs）逐项对齐，
+        // 否则未指定 Type 条件时枚举鉴权会漏掉某个类型。
         let all_task_types = [
             "ping",
             "tcp_ping",
@@ -58,6 +54,7 @@ pub async fn delete(
             "ip",
             "version",
             "dns",
+            "self_update",
         ];
 
         let mut scopes = Vec::new();
@@ -192,7 +189,8 @@ pub async fn delete(
                     delete_query = delete_query.filter(task::Column::CronSource.eq(cron_source));
                 }
                 TaskQueryCondition::Limit(n) => {
-                    limit_count = Some(n);
+                    // 钳制上限，避免 select 出海量 id 致 Vec<i64> OOM。与 crontab_result 对齐。
+                    limit_count = Some(std::cmp::min(n, MAX_QUERY_LIMIT));
                 }
                 TaskQueryCondition::Last => {
                     is_last = true;

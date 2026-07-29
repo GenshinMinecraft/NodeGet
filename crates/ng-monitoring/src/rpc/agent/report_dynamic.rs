@@ -14,6 +14,7 @@ use ng_core::permission::data_structure::{DynamicMonitoring, Permission, Scope};
 use ng_core::permission::token_auth::TokenOrAuth;
 use ng_core::utils::get_local_timestamp_ms_i64;
 use ng_db::entity::dynamic_monitoring;
+use ng_infra::server::to_rpc_error;
 use ng_token::get::check_token_limit;
 use sea_orm::{ActiveValue, Set};
 use serde_json::value::RawValue;
@@ -103,12 +104,9 @@ pub async fn report_dynamic(
 
         debug!(target: "monitoring", agent_uuid = %dynamic_monitoring_data.uuid, "Received dynamic data, sending to buffer");
 
-        monitoring_buffer::get()
-            .ok_or_else(|| {
-                NodegetError::ConfigNotFound("MonitoringBuffers not initialized".to_owned())
-            })?
-            .dynamic_mon
-            .send(in_data);
+        monitoring_buffer::with_buffers(|b| b.dynamic_mon.send(in_data)).ok_or_else(|| {
+            NodegetError::ConfigNotFound("MonitoringBuffers not initialized".to_owned())
+        })?;
 
         let cache_value = build_dynamic_value_prebuilt(
             agent_uuid,
@@ -136,13 +134,6 @@ pub async fn report_dynamic(
 
     match process_logic.await {
         Ok(result) => Ok(result),
-        Err(e) => {
-            let nodeget_err = ng_core::error::anyhow_to_nodeget_error(&e);
-            Err(jsonrpsee::types::ErrorObject::owned(
-                nodeget_err.error_code() as i32,
-                format!("{nodeget_err}"),
-                None::<()>,
-            ))
-        }
+        Err(e) => Err(to_rpc_error(&e)),
     }
 }

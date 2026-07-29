@@ -12,7 +12,6 @@
 use ng_config::config::server::MonitoringBufferConfig;
 use ng_db::entity::{dynamic_monitoring, dynamic_monitoring_summary, static_monitoring};
 use sea_orm::EntityTrait;
-use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
@@ -31,7 +30,23 @@ const DEFAULT_CHANNEL_CAPACITY: usize = 10000;
 // ── 全局单例 ────────────────────────────────────────────────────────
 
 /// 全局 `MonitoringBuffers` 单例。
-static BUFFERS: OnceLock<MonitoringBuffers> = OnceLock::new();
+///
+/// 用 `Mutex<Option<…>>` 而非 `OnceLock`，使配置热重载（reload）时 `flush_and_shutdown`
+/// 能 `take()` 走旧实例，下一次 `init()` 重新 `replace` 并 spawn 新的 flush_loop。
+/// 若用 `OnceLock`（set 后不可重置），reload 后 `init()` 会提前 return 不重建 flush_loop，
+/// 而旧 sender 已被 `flush_and_shutdown` 关闭，导致监控数据静默全丢。详见 REVIEW C-1。
+static BUFFERS: std::sync::Mutex<Option<MonitoringBuffers>> = std::sync::Mutex::new(None);
+
+/// 在已初始化的 buffer 上运行闭包；未初始化时返回 `None`。
+///
+/// 不返回 `&MonitoringBuffers` 引用，因为底层是 `Mutex`，guard 不能跨 `&'static` 暴露。
+/// 调用方（report_static/dynamic/summary 的 send 路径）用闭包做短暂同步访问即可。
+pub fn with_buffers<R>(f: impl FnOnce(&MonitoringBuffers) -> R) -> Option<R> {
+    let guard = BUFFERS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    guard.as_ref().map(f)
+}
 
 /// 全局 `flush_loop` `JoinHandle`，`flush_and_shutdown` 通过这些 handle 等待 flush 完成。
 static FLUSH_HANDLES: std::sync::Mutex<Option<[JoinHandle<()>; 3]>> = std::sync::Mutex::new(None);
@@ -46,11 +61,6 @@ pub struct MonitoringBuffers {
     pub dynamic_summary: BufferSender<dynamic_monitoring_summary::ActiveModel>,
 }
 
-/// 获取全局 buffer 实例，未初始化时返回 `None`。
-pub fn get() -> Option<&'static MonitoringBuffers> {
-    BUFFERS.get()
-}
-
 /// 初始化全局 buffer 并启动三个后台 flush task。
 ///
 /// - `config` — 可选的缓冲区配置，未提供时使用默认值
@@ -59,9 +69,7 @@ pub fn get() -> Option<&'static MonitoringBuffers> {
 /// - 3. 设置全局单例（重复调用时跳过）
 /// - 4. 为每个 channel 启动独立的 `flush_loop` tokio task
 ///
-/// # Panics
-///
-/// Panics if the internal `FLUSH_HANDLES` Mutex is poisoned (i.e., a previous holder panicked).
+/// 内部 `FLUSH_HANDLES` Mutex 即便被 poison 也通过 `into_inner` 恢复，不会 panic。
 pub fn init(config: Option<&MonitoringBufferConfig>) {
     let flush_interval_ms = config
         .and_then(|c| c.flush_interval_ms)
@@ -85,10 +93,13 @@ pub fn init(config: Option<&MonitoringBufferConfig>) {
         dynamic_summary: BufferSender::new(summary_tx, channel_capacity),
     };
 
-    if BUFFERS.set(buffers).is_err() {
-        warn!(target: "monitoring", "MonitoringBuffers already initialized, skipping");
-        return;
-    }
+    // 用新实例覆盖全局单例。reload 场景下 flush_and_shutdown 已 take() 走旧实例，
+    // 此处 replace 会覆盖任何残留（drop 旧 sender），保证下次 send 走新 channel。
+    // 注意：若旧 flush_loop 仍在跑（异常情况），其 channel 已被 replace 后的新 sender
+    // 隔离，旧 receiver 收到 None 退出，不会与新 buffer 串话。
+    *BUFFERS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(buffers);
 
     // 启动三个后台 flush task，保存 JoinHandle 用于 shutdown 时等待
     // 各表列数：static_monitoring=8, dynamic_monitoring=11, dynamic_monitoring_summary=27
@@ -125,7 +136,9 @@ pub fn init(config: Option<&MonitoringBufferConfig>) {
             27,
         )),
     ];
-    *FLUSH_HANDLES.lock().unwrap() = Some(handles);
+    *FLUSH_HANDLES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(handles);
 
     debug!(
         target: "monitoring",
@@ -136,16 +149,22 @@ pub fn init(config: Option<&MonitoringBufferConfig>) {
     );
 }
 
-/// 刷新所有缓冲区并等待完成（用于 graceful shutdown）。
+/// 刷新所有缓冲区并等待完成（用于 graceful shutdown 与配置热重载）。
 ///
 /// Drop 掉所有 `sender` 使 `channel` 关闭，`flush_loop` 的 `rx.recv()` 返回 `None`，
 /// 触发最后一次 flush 后退出。通过 `JoinHandle` + timeout 等待 flush 完成，避免固定 sleep。
 ///
-/// # Panics
+/// 关键：本函数 **take() 走全局单例**（清空 `BUFFERS`），使下一次 `init()` 能重新
+/// `replace` 并 spawn 新的 flush_loop。否则 `OnceLock`/残留单例会让 reload 后的 `init()`
+/// 提前 return，监控数据静默全丢（详见 REVIEW C-1）。
 ///
-/// Panics if the internal `FLUSH_HANDLES` Mutex is poisoned (i.e., a previous holder panicked).
+/// 内部 `FLUSH_HANDLES` Mutex 即便被 poison 也通过 `into_inner` 恢复，不会 panic。
 pub async fn flush_and_shutdown() {
-    let Some(buffers) = BUFFERS.get() else {
+    let Some(buffers) = BUFFERS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .take()
+    else {
         return;
     };
     // Drop 所有 sender，关闭 channel
@@ -155,7 +174,10 @@ pub async fn flush_and_shutdown() {
 
     // 通过 JoinHandle 并发等待所有 flush_loop 完成最终 flush，5 秒超时兜底
     // 使用 join_all 并发等待，总超时 5 秒（而非每个 handle 顺序等待各 5 秒）
-    let handles_opt = FLUSH_HANDLES.lock().unwrap().take();
+    let handles_opt = FLUSH_HANDLES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .take();
     if let Some(handles) = handles_opt {
         let timeout_dur = Duration::from_secs(5);
         let result =
@@ -284,13 +306,7 @@ async fn flush_loop<E, A>(
             item = rx.recv() => {
                 if let Some(model) = item {
                     buf.push(model);
-                    // drain 所有立即可用的消息
-                    while buf.len() < max_batch_size {
-                        match rx.try_recv() {
-                            Ok(m) => buf.push(m),
-                            Err(_) => break,
-                        }
-                    }
+                    // drain 统一在 select! 之后的公共路径完成（recv 与 tick 分支共用）
                 } else {
                     // channel 关闭，flush 剩余数据后退出
                     if !buf.is_empty() {
@@ -303,7 +319,7 @@ async fn flush_loop<E, A>(
             _ = ticker.tick() => {}
         }
 
-        // drain 所有立即可用的消息（tick 分支也需要收集）
+        // 公共 drain：recv 分支收到首条后、tick 分支定时触发时都需收集所有立即可用消息
         while buf.len() < max_batch_size {
             match rx.try_recv() {
                 Ok(m) => buf.push(m),
@@ -335,7 +351,7 @@ where
     E: EntityTrait,
     A: sea_orm::ActiveModelTrait<Entity = E> + Send + 'static,
 {
-    let batch = std::mem::take(buf);
+    let mut batch = std::mem::take(buf);
     let total = batch.len();
     if total == 0 {
         return;
@@ -359,13 +375,21 @@ where
     let mut inserted: usize = 0;
     let mut dropped: usize = 0;
 
-    let sub_batches: Vec<Vec<A>> = batch.chunks(chunk_size).map(<[A]>::to_vec).collect();
-    for sub_batch in sub_batches {
-        // SQLite: 子批次已按 999/num_columns 动态拆分，参数数量不会超限
-        // PostgreSQL: chunk_size == total，整批写入
-        // 两种后端均直接 insert_many，无需 clone；失败时整批丢弃并记录
+    // 按子批边界零拷贝切分：每次从头部 drain 出 chunk_size 行，避免 chunks().to_vec() 整批 clone。
+    // SQLite: 子批次已按 999/num_columns 动态拆分，参数数量不会超限
+    // PostgreSQL: chunk_size == total，单次循环整批写入
+    while !batch.is_empty() {
+        let take = chunk_size.min(batch.len());
+        let sub_batch: Vec<A> = batch.drain(..take).collect();
         let count = sub_batch.len();
-        match E::insert_many(sub_batch).exec(db).await {
+        // on_conflict_do_nothing：并发同 (uuid_id, data_hash) 等冲突时，DB 跳过冲突行、
+        // 保留非冲突行，整子批不再因一条冲突而整体丢弃（见 REVIEW M11）。
+        // 生成 ON CONFLICT DO NOTHING（SQLite/PostgreSQL 均支持，匹配任意 UNIQUE 约束）。
+        match E::insert_many(sub_batch)
+            .on_conflict_do_nothing()
+            .exec(db)
+            .await
+        {
             Ok(_) => inserted += count,
             Err(e) => {
                 error!(
@@ -373,7 +397,7 @@ where
                     table = table_name,
                     count,
                     error = %e,
-                    "Batch insert failed, dropping batch"
+                    "Batch insert failed, dropping this sub-batch"
                 );
                 dropped += count;
             }

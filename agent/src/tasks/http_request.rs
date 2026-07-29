@@ -80,6 +80,18 @@ pub async fn execute_http_request(task: HttpRequestTask) -> Result<HttpRequestTa
             NodegetError::InvalidInput(format!("Invalid http_request.method: {e}"))
         })?;
 
+    // scheme allow-list：仅允许 http/https，与 http_ping 一致。
+    // reqwest 在 default-features=false + rustls-no-provider 下本就拒绝非 http(s) scheme，
+    // 此处提前校验给出清晰的 InvalidInput（而非依赖 reqwest 内部连接器拒绝的模糊错误）。
+    let scheme = task.url.scheme();
+    if scheme != "http" && scheme != "https" {
+        warn!(target: "task", "HTTP 请求 scheme 不允许: url={}, scheme={scheme}", task.url);
+        return Err(NodegetError::InvalidInput(format!(
+            "http_request.url scheme must be http or https, got '{scheme}'"
+        ))
+        .into());
+    }
+
     let client = if let Some(ip_raw) = task.ip.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
         let ip = match ip_raw.to_ascii_lowercase().as_str() {
             "ipv4 auto" => IpAddr::V4(Ipv4Addr::UNSPECIFIED),

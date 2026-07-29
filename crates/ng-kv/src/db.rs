@@ -102,6 +102,10 @@ pub async fn create_kv(namespace: String) -> Result<KVStore> {
 /// # 返回值
 /// 命名空间或 key 不存在返回 `None`，存在返回对应值
 pub async fn get_v_from_kv_lenient(namespace: &str, key: &str) -> Result<Option<Value>> {
+    // 不暴露内部 namespace marker（见 REVIEW L23）
+    if key == NAMESPACE_MARKER_KEY {
+        return Ok(None);
+    }
     let db = get_db_conn()?;
     let model = kv::Entity::find()
         .filter(kv::Column::Namespace.eq(namespace))
@@ -122,6 +126,10 @@ pub async fn get_v_from_kv_lenient(namespace: &str, key: &str) -> Result<Option<
 /// # 返回值
 /// 成功时返回对应的值（如果存在），失败返回错误
 pub async fn get_v_from_kv(namespace: String, key: String) -> Result<Option<Value>> {
+    // 不暴露内部 namespace marker（见 REVIEW L23）
+    if key == NAMESPACE_MARKER_KEY {
+        return Ok(None);
+    }
     let db = get_db_conn()?;
     ensure_namespace_exists(db, &namespace).await?;
 
@@ -203,6 +211,15 @@ pub async fn get_or_create_kv(namespace: String) -> Result<KVStore> {
 /// # 返回值
 /// 成功时返回 ()，失败返回错误
 pub async fn delete_key_from_kv(namespace: String, key: String) -> Result<()> {
+    // 拒绝删除 namespace marker：marker 是 namespace 存在性的内部标记，
+    // 删除会使该 namespace 被视为不存在（get_or_create_kv 可自愈重插，但 create_kv 不自愈）。
+    // 此前 marker 可被 delete_key 删除且无 guard，见 REVIEW L23。
+    if key == NAMESPACE_MARKER_KEY {
+        return Err(NodegetError::InvalidInput(format!(
+            "Cannot delete namespace marker key '{NAMESPACE_MARKER_KEY}'"
+        ))
+        .into());
+    }
     let db = get_db_conn()?;
     ensure_namespace_exists(db, &namespace).await?;
 
@@ -252,6 +269,8 @@ pub async fn get_keys_from_kv(namespace: String) -> Result<Vec<String>> {
         .select_only()
         .column(kv::Column::Key)
         .filter(kv::Column::Namespace.eq(&namespace))
+        // 过滤内部 namespace marker，不泄漏给客户端（见 REVIEW L23）
+        .filter(kv::Column::Key.ne(NAMESPACE_MARKER_KEY))
         .order_by_asc(kv::Column::Key)
         .into_tuple()
         .all(db)
@@ -275,6 +294,8 @@ pub async fn get_kv_store(namespace: String) -> Result<KVStore> {
 
     let models = kv::Entity::find()
         .filter(kv::Column::Namespace.eq(&namespace))
+        // 过滤内部 namespace marker，不泄漏给客户端（见 REVIEW L23）
+        .filter(kv::Column::Key.ne(NAMESPACE_MARKER_KEY))
         .order_by_asc(kv::Column::Key)
         .all(db)
         .await?;
@@ -298,6 +319,8 @@ pub async fn get_kv_store_optional(namespace: String) -> Result<Option<KVStore>>
 
     let models = kv::Entity::find()
         .filter(kv::Column::Namespace.eq(&namespace))
+        // 过滤内部 namespace marker，不泄漏给客户端（见 REVIEW L23）
+        .filter(kv::Column::Key.ne(NAMESPACE_MARKER_KEY))
         .order_by_asc(kv::Column::Key)
         .all(db)
         .await?;

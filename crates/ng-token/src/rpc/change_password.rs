@@ -5,6 +5,7 @@
 use jsonrpsee::core::RpcResult;
 use ng_core::error::NodegetError;
 use ng_db::entity::token;
+use ng_infra::server::to_rpc_error;
 use sea_orm::{ActiveModelTrait, Set};
 use serde_json::value::RawValue;
 use tracing::debug;
@@ -44,6 +45,14 @@ pub async fn change_password(
         if new_password.len() < 6 {
             return Err(NodegetError::InvalidInput(
                 "New password must be at least 6 characters long".to_owned(),
+            )
+            .into());
+        }
+        // 拒绝含分隔符的 password，与 generate_token 一致（见 REVIEW L27）：
+        // `username|password` 中 password 含 `:` 会被 TokenOrAuth 冒号优先误判为 Token 模式。
+        if new_password.contains(':') || new_password.contains('|') {
+            return Err(NodegetError::InvalidInput(
+                "Password cannot contain ':' or '|' characters".to_owned(),
             )
             .into());
         }
@@ -88,13 +97,6 @@ pub async fn change_password(
     // 统一错误转换：anyhow → NodegetError → JSON-RPC ErrorObject
     match process_logic.await {
         Ok(result) => Ok(result),
-        Err(e) => {
-            let nodeget_err = ng_core::error::anyhow_to_nodeget_error(&e);
-            Err(jsonrpsee::types::ErrorObject::owned(
-                nodeget_err.error_code() as i32,
-                format!("{nodeget_err}"),
-                None::<()>,
-            ))
-        }
+        Err(e) => Err(to_rpc_error(&e)),
     }
 }

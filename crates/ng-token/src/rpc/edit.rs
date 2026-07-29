@@ -7,6 +7,7 @@ use ng_core::error::NodegetError;
 use ng_core::permission::data_structure::Limit;
 use ng_core::permission::token_auth::TokenOrAuth;
 use ng_db::entity::token;
+use ng_infra::server::to_rpc_error;
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use serde_json::value::RawValue;
 use tracing::{debug, warn};
@@ -77,6 +78,16 @@ pub async fn edit(
             .into());
         };
 
+        // 超级令牌（id=1）不可被编辑：与 token_delete 的 `.ne(1)` 保护对齐。
+        // 超管权限来自 check_super_token 的常量时间凭据比较，绕过 token_limit，
+        // 改其 limit 无实效，但此处显式拒绝以消除与 delete 的行为不一致。
+        if model.id == 1 {
+            warn!(target: "token", "attempted to edit the super token");
+            return Err(
+                NodegetError::PermissionDenied("SuperToken cannot be edited".to_owned()).into(),
+            );
+        }
+
         debug!(target: "token", id = model.id, token_key = %model.token_key, "Target token found for editing");
 
         let mut active_model: token::ActiveModel = model.into();
@@ -108,13 +119,6 @@ pub async fn edit(
     // 统一错误转换：anyhow → NodegetError → JSON-RPC ErrorObject
     match process_logic.await {
         Ok(result) => Ok(result),
-        Err(e) => {
-            let nodeget_err = ng_core::error::anyhow_to_nodeget_error(&e);
-            Err(jsonrpsee::types::ErrorObject::owned(
-                nodeget_err.error_code() as i32,
-                format!("{nodeget_err}"),
-                None::<()>,
-            ))
-        }
+        Err(e) => Err(to_rpc_error(&e)),
     }
 }

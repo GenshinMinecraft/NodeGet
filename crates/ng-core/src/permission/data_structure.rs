@@ -14,16 +14,16 @@ use std::sync::Arc;
 pub struct Token {
     /// Token 版本号
     pub version: i32,
-    /// Token 的 key 标识
-    pub token_key: String,
+    /// Token 的 key 标识。`Arc<str>` 使鉴权层返回时 `Arc::clone` 零分配（见 REVIEW L9）。
+    pub token_key: Arc<str>,
     /// 有效期起始（Unix 毫秒，None 表示无下界）
     pub timestamp_from: Option<i64>,
     /// 有效期截止（Unix 毫秒，None 表示无上界）
     pub timestamp_to: Option<i64>,
     /// 权限限制列表。用 `Arc` 包裹，鉴权层返回时 `Arc::clone` 零分配而非深拷贝 `Vec`。
     pub token_limit: Arc<Vec<Limit>>,
-    /// 关联的用户名
-    pub username: Option<String>,
+    /// 关联的用户名。`Arc<str>` 同上。
+    pub username: Option<Arc<str>>,
 }
 
 /// 单条权限限制：作用域 + 允许的操作。
@@ -104,6 +104,13 @@ pub enum NodeGet {
     DeleteAgentUuid,
     /// 执行原生 SQL
     ExecSql,
+    /// 查询主库后端类型（sqlite/postgres/mysql/unknown）——低特权只读权限。
+    ///
+    /// 此前 `get_database_type` 复用全信任 `ExecSql`，仅查后端类型即要求最高授权
+    /// （ExecSql 在 SQLite 下可 ATTACH 任意路径等价文件系统读写）。拆出此轻量变体
+    /// 遵循最小权限原则，使仅需探测后端类型的运维/前端工具无需授予任意 SQL 权限。
+    /// 见 REVIEW L1。
+    GetDatabaseType,
 }
 
 /// 监控 UUID 管理权限
@@ -694,7 +701,7 @@ mod tests {
             username: Some("admin".into()),
         };
         assert_eq!(t.version, 1);
-        assert_eq!(t.token_key, "abc");
+        assert_eq!(&*t.token_key, "abc");
         assert_eq!(t.timestamp_from, Some(1000));
         assert_eq!(t.timestamp_to, Some(2000));
         assert_eq!(t.token_limit.len(), 1);

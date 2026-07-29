@@ -20,6 +20,34 @@ pub mod uuid;
 #[cfg(feature = "for-server")]
 pub mod server_json;
 
+// ── 查询限制常量（业务 crate 的 RPC query/delete 统一引用）────────────
+//
+// 此前各 crate（ng-task / ng-js-worker / ng-crontab / ng-monitoring）在 query.rs
+// 与 delete.rs 局部重复定义 MAX_LIMIT / DEFAULT_LIMIT，值与语义曾出现漂移。现统一到
+// 此处作为单一事实源，避免维护时一处改漏。
+
+/// 查询/删除返回行数的硬上限（防 OOM 与长事务）。客户端传更大的 Limit 会被钳到此值。
+pub const MAX_QUERY_LIMIT: u64 = 10_000;
+
+/// `exec_sql` 原始结果集的后置截断上限。
+///
+/// 与 `MAX_QUERY_LIMIT` 值相同但语义独立：`MAX_QUERY_LIMIT` 钳制客户端传入的 `Limit`
+/// 参数（ORM select 路径）；本常量截断任意用户 SQL（raw 路径，可能含无 LIMIT 全表扫描/
+/// RETURNING/CTE）的结果集。二者独立，避免将来放宽其一波及另一类 RPC。
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "value is a small compile-time constant"
+)]
+pub const EXEC_SQL_RESULT_TRUNCATE_LIMIT: usize = MAX_QUERY_LIMIT as usize;
+
+/// 结果类查询（task / js_result / crontab_result）的默认返回行数（客户端未指定 Limit 时）。
+pub const DEFAULT_RESULT_QUERY_LIMIT: u64 = 1000;
+
+/// 监控数据查询（static/dynamic/summary）的默认返回行数。
+///
+/// 监控数据按时间序列高频写入，默认拉取更多行以支撑趋势展示，故大于结果类查询的默认值。
+pub const DEFAULT_MONITORING_QUERY_LIMIT: u64 = 10_000;
+
 /// RPC 错误响应结构体，所有 RPC 方法统一返回此格式。
 #[derive(Serialize, Deserialize)]
 pub struct JsonError {

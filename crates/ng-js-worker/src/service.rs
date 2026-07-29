@@ -151,23 +151,10 @@ pub async fn enqueue_defined_js_worker_run(
         env_override.unwrap_or_else(|| model.env.unwrap_or_else(|| serde_json::json!({})));
     let run_type_text = run_type.as_str().to_owned();
 
+    // 执行计时起点（insert_js_result_row 内部自取 start_time 写库，此处独立用于耗时统计）
     let start_time = get_local_timestamp_ms_i64().unwrap_or(0);
-    let insert_result = js_result::Entity::insert(js_result::ActiveModel {
-        id: ActiveValue::NotSet,
-        js_worker_id: Set(worker_id),
-        js_worker_name: Set(worker_name.clone()),
-        run_type: Set(run_type_text),
-        start_time: Set(Some(start_time)),
-        finish_time: Set(None),
-        param: Set(Some(params.clone())),
-        result: Set(None),
-        error_message: Set(None),
-    })
-    .exec(&db)
-    .await
-    .map_err(|e| NodegetError::DatabaseError(e.to_string()))?;
-
-    let js_result_id = insert_result.last_insert_id;
+    let js_result_id =
+        insert_js_result_row(&db, worker_id, &worker_name, run_type_text, &params).await?;
     trace!(target: "js_worker", js_result_id = js_result_id, worker = %worker_name, "spawning bytecode execution task");
 
     tokio::spawn(async move {
@@ -243,7 +230,26 @@ pub async fn run_inline_call_and_record_result(
     params_json: String,
     timeout_sec: Option<f64>,
     inline_caller: Option<String>,
+    inline_depth: u32,
 ) -> anyhow::Result<String> {
+    /// inlineCall 递归深度上限：worker 自递归/互递归每层 +1，超过即拒绝，
+    /// 避免无限递归堆叠 spawn_blocking 线程挤占阻塞池。
+    /// 与 server_runtime.rs 的 JS 侧 MAX_INLINE_DEPTH 保持一致。
+    const MAX_INLINE_DEPTH: u32 = 10;
+    if inline_depth > MAX_INLINE_DEPTH {
+        warn!(
+            target: "js_worker",
+            script_name = %js_script_name,
+            inline_caller = ?inline_caller,
+            inline_depth,
+            "inlineCall recursion depth limit reached"
+        );
+        return Err(NodegetError::Other(format!(
+            "inlineCall recursion depth limit reached (max {MAX_INLINE_DEPTH}): attempted to call '{js_script_name}' at depth {inline_depth}"
+        ))
+        .into());
+    }
+
     let script_name = js_script_name.trim().to_owned();
     if script_name.is_empty() {
         warn!(target: "js_worker", "验证失败: js_worker_name 为空");
@@ -290,21 +296,14 @@ pub async fn run_inline_call_and_record_result(
     let env = model.env.unwrap_or_else(|| serde_json::json!({}));
 
     let start_time = get_local_timestamp_ms_i64().unwrap_or(0);
-    let insert_result = js_result::Entity::insert(js_result::ActiveModel {
-        id: ActiveValue::NotSet,
-        js_worker_id: Set(worker_id),
-        js_worker_name: Set(worker_name.clone()),
-        run_type: Set(RunType::InlineCall.as_str().to_owned()),
-        start_time: Set(Some(start_time)),
-        finish_time: Set(None),
-        param: Set(Some(params.clone())),
-        result: Set(None),
-        error_message: Set(None),
-    })
-    .exec(&db)
-    .await
-    .map_err(|e| NodegetError::DatabaseError(e.to_string()))?;
-    let js_result_id = insert_result.last_insert_id;
+    let js_result_id = insert_js_result_row(
+        &db,
+        worker_id,
+        &worker_name,
+        RunType::InlineCall.as_str().to_owned(),
+        &params,
+    )
+    .await?;
 
     let target_script_name = worker_name.clone();
     let run_task = tokio::task::spawn_blocking(move || {
@@ -315,6 +314,7 @@ pub async fn run_inline_call_and_record_result(
             env,
             Some(target_script_name),
             inline_caller,
+            inline_depth,
             timeout_duration,
             limits,
         )
@@ -426,23 +426,10 @@ pub async fn enqueue_source_js_worker_run(
         env_override.unwrap_or_else(|| model.env.unwrap_or_else(|| serde_json::json!({})));
     let run_type_text = run_type.as_str().to_owned();
 
+    // 执行计时起点（insert_js_result_row 内部自取 start_time 写库，此处独立用于耗时统计）
     let start_time = get_local_timestamp_ms_i64().unwrap_or(0);
-    let insert_result = js_result::Entity::insert(js_result::ActiveModel {
-        id: ActiveValue::NotSet,
-        js_worker_id: Set(worker_id),
-        js_worker_name: Set(worker_name.clone()),
-        run_type: Set(run_type_text),
-        start_time: Set(Some(start_time)),
-        finish_time: Set(None),
-        param: Set(Some(params.clone())),
-        result: Set(None),
-        error_message: Set(None),
-    })
-    .exec(&db)
-    .await
-    .map_err(|e| NodegetError::DatabaseError(e.to_string()))?;
-
-    let js_result_id = insert_result.last_insert_id;
+    let js_result_id =
+        insert_js_result_row(&db, worker_id, &worker_name, run_type_text, &params).await?;
 
     let worker_name_for_log = worker_name.clone();
     trace!(target: "js_worker", js_result_id = js_result_id, worker = %worker_name_for_log, "spawning source mode execution task");
@@ -506,4 +493,34 @@ pub async fn enqueue_source_js_worker_run(
     });
 
     Ok(js_result_id)
+}
+
+/// 插入一条 `js_result` 行（start_time 已填，finish_time/result/error_message 为 None）。
+///
+/// 三个执行入口（字节码池 / 源码一次性 / 内联调用）的插入逻辑完全一致，统一在此 helper
+/// 完成，避免 ActiveModel 字面量三处重复粘贴。后续的 update（回填执行结果）因各入口的
+/// 字段与触发条件差异较大，仍由各入口自行处理。
+async fn insert_js_result_row(
+    db: &sea_orm::DatabaseConnection,
+    worker_id: i64,
+    worker_name: &str,
+    run_type_text: String,
+    params: &Value,
+) -> Result<i64, NodegetError> {
+    let start_time = get_local_timestamp_ms_i64().unwrap_or(0);
+    let insert_result = js_result::Entity::insert(js_result::ActiveModel {
+        id: ActiveValue::NotSet,
+        js_worker_id: Set(worker_id),
+        js_worker_name: Set(worker_name.to_owned()),
+        run_type: Set(run_type_text),
+        start_time: Set(Some(start_time)),
+        finish_time: Set(None),
+        param: Set(Some(params.clone())),
+        result: Set(None),
+        error_message: Set(None),
+    })
+    .exec(db)
+    .await
+    .map_err(|e| NodegetError::DatabaseError(e.to_string()))?;
+    Ok(insert_result.last_insert_id)
 }

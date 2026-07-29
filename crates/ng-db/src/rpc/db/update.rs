@@ -22,7 +22,7 @@ use tracing::{debug, warn};
 /// - 返回值：包含更新后 `id`、`name`、`created_at` 的响应
 ///
 /// 内部步骤：
-/// 1. 检查新旧名称的 `Db::Update` 权限，校验新名称合法性
+/// 1. 校验新旧名称合法性，检查新旧名称的 `Db::Update` 权限
 /// 2. 确认旧名称存在、新名称不存在
 /// 3. 在 `spawn_blocking` 中重命名磁盘文件（.db、-wal、-shm）
 /// 4. 更新 `db_registry` 表中的名称
@@ -33,10 +33,12 @@ pub async fn update(token: String, name: String, new_name: String) -> RpcResult<
     let (tk, un) = token_identity(&token);
 
     let process_logic = async {
+        // 先校验新旧名称合法性（含路径穿越防护），再做鉴权（见 create.rs 同款注释）。
+        validate_db_name(&name)?;
+        validate_db_name(&new_name)?;
         // 新旧名称均需 Update 权限
         check_db_permission(&token, &name, DbPermission::Update).await?;
         check_db_permission(&token, &new_name, DbPermission::Update).await?;
-        validate_db_name(&new_name)?;
 
         let db = get_db().ok_or_else(|| {
             NodegetError::DatabaseError("Main database not initialized".to_owned())
@@ -64,6 +66,9 @@ pub async fn update(token: String, name: String, new_name: String) -> RpcResult<
         let mgr = DbRegistryManager::global().ok_or_else(|| {
             NodegetError::ConfigNotFound("DbRegistryManager not initialized".to_owned())
         })?;
+        // 持连接操作序列锁覆盖 rename + registry-update + create_conn（见 REVIEW L13），
+        // 防止并发 db.update / db.create 交错导致 pool 缺条目或文件重命名竞态。
+        let _conn_op_guard = mgr.lock_conn_op().await;
         let old_file = mgr.get_db_path(&name);
         let new_file = mgr.get_db_path(&new_name);
 

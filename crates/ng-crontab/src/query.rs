@@ -1,8 +1,7 @@
-//! CrontabResult 查询 DSL：定义查询条件和响应结构。
+//! CrontabResult 查询 DSL：定义查询条件。
 //!
 //! `CrontabResultQueryCondition` 提供链式过滤条件，
-//! `CrontabResultDataQuery` 将条件列表封装为 RPC 请求参数，
-//! `CrontabResultResponseItem` 为 RPC 响应中的单条结果项。
+//! `CrontabResultDataQuery` 将条件列表封装为 RPC 请求参数。
 
 use serde::{Deserialize, Serialize};
 
@@ -37,23 +36,4 @@ pub enum CrontabResultQueryCondition {
 pub struct CrontabResultDataQuery {
     /// 查询条件列表，各条件之间为 AND 关系
     pub condition: Vec<CrontabResultQueryCondition>,
-}
-
-/// CrontabResult RPC 响应项，对应单条执行结果记录。
-#[derive(Serialize)]
-pub struct CrontabResultResponseItem {
-    /// 记录 ID
-    pub id: i64,
-    /// 所属定时任务 ID
-    pub cron_id: i64,
-    /// 所属定时任务名称
-    pub cron_name: String,
-    /// 关联资源 ID（Agent 任务 ID 或 JS Worker 运行 ID）
-    pub relative_id: Option<i64>,
-    /// 运行时间（毫秒时间戳）
-    pub run_time: Option<i64>,
-    /// 是否执行成功
-    pub success: Option<bool>,
-    /// 执行结果消息
-    pub message: Option<String>,
 }

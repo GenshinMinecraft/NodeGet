@@ -2,9 +2,11 @@
 
 use crate::query::{CrontabResultDataQuery, CrontabResultQueryCondition};
 use jsonrpsee::core::RpcResult;
-use ng_core::error::{NodegetError, anyhow_to_nodeget_error};
+use ng_core::error::NodegetError;
+use ng_core::utils::MAX_QUERY_LIMIT;
 use ng_db::entity::crontab_result;
 use ng_db::get_db;
+use ng_infra::server::to_rpc_error;
 use sea_orm::{ColumnTrait, EntityTrait, ExprTrait, QueryFilter, QueryOrder, QuerySelect};
 use serde_json::value::RawValue;
 use std::collections::HashSet;
@@ -33,6 +35,11 @@ pub async fn query(token: String, query: CrontabResultDataQuery) -> RpcResult<Bo
         // 收集所有 CronName 条件，用于后续权限检查
         let mut cron_names: HashSet<&str> = HashSet::new();
         let mut has_cron_name_filter = false;
+        // Limit/Last 在循环内只记录、循环后互斥单次 apply（对齐 js_result 范式，见 REVIEW L25）。
+        // 此前循环内直接多次 .limit()，依赖 SeaORM last-write-wins，Last+Limit(N) 组合时
+        // 有效 limit 取决于 condition 顺序，行为不确定。
+        let mut is_last = false;
+        let mut limit_count: Option<u64> = None;
 
         // 处理查询条件，应用到 SeaORM 查询
         for condition in &query.condition {
@@ -68,13 +75,11 @@ pub async fn query(token: String, query: CrontabResultDataQuery) -> RpcResult<Bo
                     select = select.filter(crontab_result::Column::Success.eq(false));
                 }
                 CrontabResultQueryCondition::Limit(limit) => {
-                    const MAX_LIMIT: u64 = 10_000;
-                    select = select.limit(std::cmp::min(*limit, MAX_LIMIT));
+                    // 循环内只记录，循环后统一 apply（避免多次 .limit() 的 last-write-wins 歧义）
+                    limit_count = Some(std::cmp::min(*limit, MAX_QUERY_LIMIT));
                 }
                 CrontabResultQueryCondition::Last => {
-                    // 按 run_time 降序排序，只取第一条
-                    select = select.order_by_desc(crontab_result::Column::RunTime);
-                    select = select.limit(1);
+                    is_last = true;
                 }
             }
         }
@@ -91,24 +96,22 @@ pub async fn query(token: String, query: CrontabResultDataQuery) -> RpcResult<Bo
 
         debug!(target: "crontab_result", condition_count = query.condition.len(), has_cron_name_filter, "crontab_result query permission check passed");
 
-        // 默认按 run_time 降序排序（Last 条件已自带排序，此处跳过）
-        if !query
-            .condition
-            .iter()
-            .any(|c| matches!(c, CrontabResultQueryCondition::Last))
-        {
-            select = select.order_by_desc(crontab_result::Column::RunTime);
-        }
-
-        // 未显式指定 Limit/Last 时施加默认上限，防止无界查询
-        let has_explicit_limit = query.condition.iter().any(|c| {
-            matches!(
-                c,
-                CrontabResultQueryCondition::Limit(_) | CrontabResultQueryCondition::Last
-            )
-        });
-        if !has_explicit_limit {
-            select = select.limit(1000);
+        // 循环后互斥单次 apply limit + 排序（对齐 js_result）。
+        // - Last：按 run_time 降序取 1 条
+        // - Limit(N)：按 run_time 降序取 N 条（已钳到 MAX_QUERY_LIMIT）
+        // - 都无：按 run_time 降序取默认 1000 条（防无界查询）
+        if is_last {
+            select = select
+                .order_by_desc(crontab_result::Column::RunTime)
+                .limit(1);
+        } else if let Some(limit) = limit_count {
+            select = select
+                .order_by_desc(crontab_result::Column::RunTime)
+                .limit(limit);
+        } else {
+            select = select
+                .order_by_desc(crontab_result::Column::RunTime)
+                .limit(1000);
         }
 
         // 执行查询
@@ -125,13 +128,6 @@ pub async fn query(token: String, query: CrontabResultDataQuery) -> RpcResult<Bo
 
     match process_logic.await {
         Ok(result) => Ok(result),
-        Err(e) => {
-            let nodeget_err = anyhow_to_nodeget_error(&e);
-            Err(jsonrpsee::types::ErrorObject::owned(
-                nodeget_err.error_code() as i32,
-                format!("{nodeget_err}"),
-                None::<()>,
-            ))
-        }
+        Err(e) => Err(to_rpc_error(&e)),
     }
 }

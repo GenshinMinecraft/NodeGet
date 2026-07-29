@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 /// - `All` — 无限制，拥有所有范围的完整访问权。
 /// - `Scoped(Vec<T>)` — 仅允许访问列表中的条目。
 ///
-/// 使用 `Vec<T>` 而非 `HashSet<T>`，因为只需 `Eq` 约束即可
-/// （ng-core 的 `Scope` 类型未实现 `Hash`）。
+/// 使用 `Vec<T>` 而非 `HashSet<T>`：仅需 `Eq` 约束，且权限列表通常很短，
+/// 线性查找即可（ng-core 的 `Scope` 虽已 derive `Hash`，但这里仍沿用 `Vec`）。
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ScopedPermission<T> {

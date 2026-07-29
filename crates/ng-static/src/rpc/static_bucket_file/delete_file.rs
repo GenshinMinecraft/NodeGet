@@ -7,6 +7,7 @@ use crate::ops::delete_file;
 use jsonrpsee::core::RpcResult;
 use ng_core::error::NodegetError;
 use ng_core::permission::data_structure::StaticBucketFile;
+use ng_infra::server::to_rpc_error;
 use serde_json::value::RawValue;
 use tracing::debug;
 
@@ -36,13 +37,6 @@ pub async fn delete_file_rpc(
 
     match process_logic.await {
         Ok(result) => Ok(result),
-        Err(e) => {
-            let nodeget_err = ng_core::error::anyhow_to_nodeget_error(&e);
-            Err(jsonrpsee::types::ErrorObject::owned(
-                nodeget_err.error_code() as i32,
-                format!("{nodeget_err}"),
-                None::<()>,
-            ))
-        }
+        Err(e) => Err(to_rpc_error(&e)),
     }
 }

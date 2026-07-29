@@ -150,7 +150,15 @@ pub async fn run(config: &ServerConfig) {
                     let landing_html = landing_html.clone();
                     async move {
                         if is_websocket_upgrade(req.headers()) {
-                            return rpc_service.call(req).await.unwrap();
+                            // 与下方非 WS 路径一致的错误兜底：upgrade/service 层抛错时
+                            // 返回 500 并记录日志，而非 unwrap() 致 handler task panic。
+                            return rpc_service.call(req).await.unwrap_or_else(|e| {
+                                tracing::error!(target: "server", error = %e, "RPC WebSocket upgrade call failed");
+                                axum::http::Response::builder()
+                                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                                    .body(jsonrpsee::server::HttpBody::from("Internal Server Error"))
+                                    .expect("Failed to build error response")
+                            });
                         }
 
                         if req.method() == axum::http::Method::GET {
@@ -165,7 +173,7 @@ pub async fn run(config: &ServerConfig) {
                                     .expect("Failed to build HTML response");
                             };
                             if let Some(model) = cache.get_http_root()
-                                && model.enable != Some(false)
+                                && model.enable
                             {
                                 let path = req.uri().path().to_owned();
                                 let method = req.method().clone();
@@ -209,7 +217,15 @@ pub async fn run(config: &ServerConfig) {
                     let landing_html = landing_html_for_rpc.clone();
                     async move {
                         if is_websocket_upgrade(req.headers()) {
-                            return rpc_service.call(req).await.unwrap();
+                            // 与下方非 WS 路径一致的错误兜底：upgrade/service 层抛错时
+                            // 返回 500 并记录日志，而非 unwrap() 致 handler task panic。
+                            return rpc_service.call(req).await.unwrap_or_else(|e| {
+                                tracing::error!(target: "server", error = %e, "RPC WebSocket upgrade call failed");
+                                axum::http::Response::builder()
+                                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                                    .body(jsonrpsee::server::HttpBody::from("Internal Server Error"))
+                                    .expect("Failed to build error response")
+                            });
                         }
 
                         if req.method() == axum::http::Method::GET {
@@ -224,7 +240,7 @@ pub async fn run(config: &ServerConfig) {
                                     .expect("Failed to build HTML response");
                             };
                             if let Some(model) = cache.get_http_root()
-                                && model.enable != Some(false)
+                                && model.enable
                             {
                                 let path = req.uri().path().to_owned();
                                 let method = req.method().clone();
@@ -426,10 +442,11 @@ pub async fn run(config: &ServerConfig) {
                     .expect("DbRegistryManager not initialized at shutdown")
                     .shutdown()
                     .await;
-                let stop_handle = stop_handle.clone();
-                tokio::spawn(async move {
-                    let _ = tokio::time::timeout(std::time::Duration::from_secs(5), stop_handle.shutdown()).await;
-                });
+                // inline await stop_handle.shutdown()（与 stop 分支一致），而非 detached spawn。
+                // detached 会让旧 RPC handler 继续执行 ≤5s，与重新进入 run() 后重建的
+                // 全局缓存（TokenCache/MonitoringUuidCache/StaticCache 等）并发共享——
+                // inline 等待 drain 完成后再返回，消除该竞态窗口。
+                let _ = tokio::time::timeout(std::time::Duration::from_secs(5), stop_handle.shutdown()).await;
                 #[cfg(not(target_os = "windows"))]
                 if let Some(task) = unix_server_task.take() {
                     task.abort();
@@ -477,10 +494,10 @@ pub async fn run(config: &ServerConfig) {
                     .expect("DbRegistryManager not initialized at shutdown")
                     .shutdown()
                     .await;
-                let stop_handle = stop_handle.clone();
-                tokio::spawn(async move {
-                    let _ = tokio::time::timeout(std::time::Duration::from_secs(5), stop_handle.shutdown()).await;
-                });
+                // inline await stop_handle.shutdown()（与 stop 分支一致），而非 detached spawn。
+                // detached 会让旧 RPC handler 继续执行 ≤5s，与重新进入 run() 后重建的
+                // 全局缓存并发共享——inline 等待 drain 完成后再返回，消除该竞态窗口。
+                let _ = tokio::time::timeout(std::time::Duration::from_secs(5), stop_handle.shutdown()).await;
                 #[cfg(not(target_os = "windows"))]
                 if let Some(task) = unix_server_task.take() {
                     task.abort();
@@ -1164,6 +1181,7 @@ impl ng_js_runtime::js_worker_service::JsWorkerService for JsWorkerServiceImpl {
         params_json: String,
         timeout_sec: Option<f64>,
         inline_caller: Option<String>,
+        inline_depth: u32,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<String>> + Send>> {
         Box::pin(async move {
             ng_js_worker::service::run_inline_call_and_record_result(
@@ -1171,6 +1189,7 @@ impl ng_js_runtime::js_worker_service::JsWorkerService for JsWorkerServiceImpl {
                 params_json,
                 timeout_sec,
                 inline_caller,
+                inline_depth,
             )
             .await
         })

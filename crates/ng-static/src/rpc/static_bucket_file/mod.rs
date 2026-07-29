@@ -15,7 +15,6 @@ use ng_infra::server::{RpcHelper, token_identity};
 use serde_json::value::RawValue;
 use tracing::Instrument;
 
-mod auth;
 mod delete_file;
 mod list_file;
 mod read_file;

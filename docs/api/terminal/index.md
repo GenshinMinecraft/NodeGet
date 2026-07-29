@@ -62,6 +62,23 @@ ws(s)://HOST(:PORT)/terminal?agent_uuid={agent_uuid}&terminal_id={terminal_id}&t
 
 未携带 `task_id` / `task_token` 的连接会被 Server 识别为用户端，此时需要 `token` 用于鉴权。
 
+::: warning 凭据经 URL 查询参数传递，注意日志泄露
+`/terminal` 的鉴权凭据（`token` / `task_token`）通过 URL 查询字符串传递，而非 HTTP Header 或 WebSocket 子协议。这意味着完整 URL（含明文凭据）可能被以下途径记录：
+
+- 反向代理（nginx / Caddy / Traefik 等）的 **access log**（默认记录请求行）
+- 浏览器历史、书签、Referer 头
+- 错误页截图、APM/链路追踪系统
+
+**建议**：
+
+1. 在反向代理层关闭 `/terminal` 路径的 access log，或对 query string 做脱敏（脱去 `token=` / `task_token=` 参数）；
+2. 避免把含 token 的 `/terminal` URL 写入书签或分享链接；
+3. 生产环境为 `/terminal` 启用 TLS（`wss://`），防止凭据在网络上明文传输；
+4. token 应设置较短有效期，并使用最小权限（仅 `Terminal::Connect` + 目标 `AgentUuid` scope）。
+
+未来版本计划改为通过 WebSocket 子协议（`Sec-WebSocket-Protocol`）传递凭据，从根本上避免出现在 URL 中。
+:::
+
 ## terminal_id 说明
 
 `terminal_id` 必须与创建 `web_shell` Task 时提交的 `terminal_id` 一致

@@ -269,6 +269,13 @@ async fn process_crontab() {
             }
             Err(e) => {
                 error!(target: "crontab", error = %e, "failed to batch update last_run_time in DB");
+                // DB 写失败时仍推进内存覆盖映射，避免下次 tick 用旧 last_run_time 重复触发。
+                // cache.get_last_run_time 优先读覆盖映射（guard.get(id).or(model_last)），
+                // 故即便 DB 未更新，此处推进后下次调度不会重触发；待 DB 恢复后下次成功的
+                // UPDATE 会把时间持久化。任务照常 spawn 执行，不丢任务。
+                for (_, id) in &due {
+                    cache.update_last_run_time(*id, now_millis);
+                }
             }
         }
     }

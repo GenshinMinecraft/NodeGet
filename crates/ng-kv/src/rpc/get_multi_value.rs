@@ -5,7 +5,8 @@ use crate::db::{get_kv_store_optional, get_v_from_kv_lenient};
 use crate::rpc::KvValueItem;
 use crate::rpc::NamespaceKeyItem;
 use jsonrpsee::core::RpcResult;
-use ng_core::error::{NodegetError, anyhow_to_nodeget_error};
+use ng_core::error::NodegetError;
+use ng_infra::server::to_rpc_error;
 use serde_json::Value;
 use serde_json::value::RawValue;
 use std::collections::HashMap;
@@ -55,14 +56,8 @@ pub async fn get_multi_value(
             );
         }
 
-        // 先做完整权限校验：任一项无权限则直接拒绝
+        // 先做完整权限校验：任一项无权限则直接拒绝（namespace/key 合法性由 check 内的 validate_* 保证）
         for item in &namespace_key {
-            if item.namespace.is_empty() {
-                warn!(target: "kv", "验证失败: namespace 为空");
-                return Err(
-                    NodegetError::InvalidInput("namespace cannot be empty".to_owned()).into(),
-                );
-            }
             check_kv_read_permission_with_pattern(&token, &item.namespace, &item.key).await?;
         }
         debug!(target: "kv", items_count = namespace_key.len(), "get_multi_value permission checks passed");
@@ -139,13 +134,6 @@ pub async fn get_multi_value(
 
     match process_logic.await {
         Ok(result) => Ok(result),
-        Err(e) => {
-            let nodeget_err = anyhow_to_nodeget_error(&e);
-            Err(jsonrpsee::types::ErrorObject::owned(
-                nodeget_err.error_code() as i32,
-                format!("{nodeget_err}"),
-                None::<()>,
-            ))
-        }
+        Err(e) => Err(to_rpc_error(&e)),
     }
 }

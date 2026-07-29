@@ -7,7 +7,7 @@ Crontab 是本项目的定时任务功能，允许用户创建定时任务在指
 Crontab 允许用户创建定时任务，支持以下类型的任务：
 
 - **Agent 任务**: 在特定 Agent 上执行的任务，如 ping、tcp_ping、http_ping、web_shell、execute、ip 等
-- **Server 任务**: 在服务器端执行的任务，如数据库清理、触发 JsWorker 脚本等
+- **Server 任务**: 在服务器端执行的任务（当前仅支持触发 JsWorker 脚本）
 
 ## 基本结构
 

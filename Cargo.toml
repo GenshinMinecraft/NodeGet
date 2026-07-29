@@ -20,7 +20,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.5.15"
+version = "0.5.17"
 license = "AGPL-3"
 edition = "2024"
 repository = "https://github.com/NodeSeekDev/NodeGet"
@@ -46,7 +46,7 @@ subtle = { version = "2.6.1", default-features = false }
 palc = { version = "0.0.2", default-features = false, features = ["help"] }
 chrono = { version = "0.4.44", default-features = false, features = ["now", "std"] }
 futures-util = { version = "0.3.32", default-features = false }
-sea-orm = { version = "2.0.0-rc.40", default-features = false, features = ["runtime-tokio-rustls", "sqlx-sqlite", "sqlx-postgres", "macros", "with-json", "with-uuid"] }
+sea-orm = { version = "2.0.0-rc.40", default-features = false, features = ["runtime-tokio-rustls", "sqlx-sqlite", "sqlx-postgres", "macros", "with-json", "with-uuid", "sqlite-use-returning-for-3_35"] }
 cron = { version = "0.16.0", default-features = false }
 dav-server = { version = "0.11.0", default-features = false, features = ["localfs"] }
 rquickjs = { git = "https://github.com/delskayn/rquickjs.git", default-features = false, features = ["futures"] }

@@ -1,7 +1,6 @@
-//! 任务查询类型定义：查询条件和响应结构体
+//! 任务查询类型定义：查询条件
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 /// 任务查询条件枚举，各条件之间为 AND 关系
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -41,27 +40,6 @@ pub enum TaskQueryCondition {
 pub struct TaskDataQuery {
     /// 查询条件列表，各条件之间为 AND 关系
     pub condition: Vec<TaskQueryCondition>,
-}
-
-/// 任务响应项结构体，用于序列化单条任务查询结果
-#[derive(Serialize)]
-pub struct TaskResponseItem {
-    /// 任务 ID
-    pub task_id: i64,
-    /// Agent UUID 字符串
-    pub uuid: String,
-    /// 任务来源的 cron name，非定时任务为 None
-    pub cron_source: Option<String>,
-    /// 完成时间戳（毫秒），运行中为 None
-    pub timestamp: Option<i64>,
-    /// 执行是否成功，运行中为 None
-    pub success: Option<bool>,
-    /// 任务事件类型 JSON
-    pub task_event_type: Value,
-    /// 任务事件结果 JSON，未完成时为 None
-    pub task_event_result: Option<Value>,
-    /// 错误消息，成功时为 None
-    pub error_message: Option<String>,
 }
 
 #[cfg(test)]

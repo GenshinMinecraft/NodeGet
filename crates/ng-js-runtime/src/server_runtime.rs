@@ -298,6 +298,7 @@ pub fn format_js_error(err: &Error) -> String {
 ///
 /// 输出 target 固定为 `js_worker`，`worker` 与 `namespace` 作为结构化字段附加，
 /// 方便通过 tracing subscriber 统一收集，也避免与 `js_runtime` 内部日志混杂。
+#[allow(clippy::needless_pass_by_value)] // 参数按值是 rquickjs `Func::from` 绑定的自然签名(JS 值转换出 owned String),改引用会破坏自动参数绑定
 pub(crate) fn js_log_emit(
     level: String,
     worker: Option<String>,
@@ -346,7 +347,16 @@ globalThis.nodeget = async (...args) => {
     return JSON.parse(raw);
 };
 globalThis.__nodeget_inline_call = async (name, paramsJson, timeoutSec, caller) => {
-    const raw = await globalThis.__nodeget_inline_call_raw(name, paramsJson, timeoutSec, caller);
+    // 递归深度上限：当前 worker 自身的深度 +1 即子调用的深度。
+    const MAX_INLINE_DEPTH = 10;
+    const currentDepth = (globalThis.__nodeget_inline_depth ?? 0) | 0;
+    if (currentDepth + 1 > MAX_INLINE_DEPTH) {
+        throw new Error(
+            `inlineCall recursion depth limit reached (max ${MAX_INLINE_DEPTH}): ` +
+            `attempted to call '${name}' at depth ${currentDepth + 1}`
+        );
+    }
+    const raw = await globalThis.__nodeget_inline_call_raw(name, paramsJson, timeoutSec, caller, currentDepth + 1);
     return JSON.parse(raw);
 };
 globalThis.execSql = async (token, sql, params) => {
@@ -750,6 +760,7 @@ pub fn prepare_invoke_globals(
     env: &Value,
     script_name: Option<&str>,
     inline_caller: Option<&str>,
+    inline_depth: u32,
 ) -> Result<(), Error> {
     let global = ctx.globals();
 
@@ -792,6 +803,9 @@ pub fn prepare_invoke_globals(
             global.set("__nodeget_inline_caller", JsValue::new_null(ctx.clone()))?;
         }
     }
+
+    // 内联调用深度（顶层=0，每层 inlineCall +1），用于递归上限校验。
+    global.set("__nodeget_inline_depth", inline_depth)?;
 
     Ok(())
 }
@@ -874,6 +888,7 @@ pub fn js_runner(
     env_value: Value,
     current_script_name: Option<String>,
     inline_caller: Option<String>,
+    inline_depth: u32,
     caller_soft_timeout: Option<std::time::Duration>,
     limits: RuntimeLimits,
 ) -> Result<Value, Error> {
@@ -908,6 +923,7 @@ pub fn js_runner(
                         &env_value,
                         current_script_name.as_deref(),
                         inline_caller.as_deref(),
+                        inline_depth,
                     )?;
 
                     let declared_module = match &js_code {
@@ -1056,6 +1072,7 @@ pub fn js_runner_source_mode(
                         &env_value,
                         Some(script_name),
                         None,
+                        0,
                     )?;
 
                     // 使用实际脚本名作为模块名，改善错误堆栈追踪

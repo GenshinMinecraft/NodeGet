@@ -50,19 +50,23 @@ fn read_static_path_from_config() -> String {
 
 /// 获取配置文件中的 `static_path`，默认 `./static/`
 ///
-/// 首次调用从配置读取并缓存到 `STATIC_PATH`，后续调用直接返回缓存值，
-/// 避免每次静态文件请求都获取 `std::sync::RwLock` 读锁 + 克隆 `String`。
+/// 首次调用从配置读取并缓存到 `STATIC_PATH`，后续调用直接返回缓存值（`Arc<String>` 克隆，
+/// 零堆分配），避免每次静态文件请求都获取 `std::sync::RwLock` 读锁 + 克隆 `String`。
 /// 配置热重载后需调用 [`reload_static_path`] 以更新缓存。
-pub fn get_static_path() -> String {
-    let cached = static_path_ref().load();
+///
+/// 返回 `Arc<String>` 而非 `String`：静态文件热路径上每请求一次 `to_string()` 堆分配
+/// 被 `Arc::clone`（仅增加引用计数）取代。调用方借用 `&*arc` 或经 deref coercion 传入
+/// `&str`/`AsRef<Path>` 参数即可。见 REVIEW L7。
+pub fn get_static_path() -> Arc<String> {
+    let cached = static_path_ref().load_full();
     if cached.is_empty() {
         // 首次访问：从配置读取并写入缓存
         let val = read_static_path_from_config();
         // 可能并发初始化，compare_and_swap 风格：无论谁先写入都行
         static_path_ref().store(Arc::new(val));
-        static_path_ref().load().to_string()
+        static_path_ref().load_full()
     } else {
-        cached.to_string()
+        cached
     }
 }
 
@@ -283,7 +287,7 @@ pub async fn create_static(
 
     // 创建实际磁盘目录：{static_path}/{path}
     let static_path = get_static_path();
-    let dir = Path::new(&static_path).join(&path_trimmed);
+    let dir = Path::new(&*static_path).join(&path_trimmed);
     if let Err(e) = tokio::fs::create_dir_all(&dir).await {
         warn!(target: "static", dir = %dir.display(), error = %e, "failed to create static directory");
     }
@@ -363,7 +367,15 @@ pub async fn update_static(
     active_model.path = Set(new_path_trimmed.clone());
     active_model.is_http_root = Set(new_is_http_root);
     active_model.cors = Set(new_cors);
-    active_model.enable = Set(new_enable);
+    // RPC 契约：enable == None 表示「不修改」该字段。
+    // 此前用 `Set(new_enable)`，在 None 时会写入 NULL（SeaORM 的 `Set(None)` 语义），
+    // 而 router 把 NULL 视为 enabled → 原本 disabled 的桶会被意外重新启用。
+    // 改为 None 时 NotSet（保持 DB 原值），Some(v) 时 Set(v)。
+    // （enable 列已收紧为 NOT NULL，entity 字段为 bool，见 L33 迁移。）
+    active_model.enable = match new_enable {
+        Some(v) => Set(v),
+        None => sea_orm::ActiveValue::NotSet,
+    };
 
     let updated = active_model.update(db).await.map_err(|e| {
         error!(target: "static", name = %name_trimmed, error = %e, "failed to update static");
@@ -372,17 +384,34 @@ pub async fn update_static(
 
     // 如新 path 对应目录尚不存在则创建；不迁移旧目录的内容
     let static_path = get_static_path();
-    let dir = Path::new(&static_path).join(&new_path_trimmed);
+    let dir = Path::new(&*static_path).join(&new_path_trimmed);
     if let Err(e) = tokio::fs::create_dir_all(&dir).await {
         warn!(target: "static", dir = %dir.display(), error = %e, "failed to create static directory");
     }
 
     StaticCache::reload().await?;
+    // path 变更后，DavHandler 缓存里按 name 绑定的 LocalFs 仍指向旧磁盘路径
+    //（LocalFs 在构建时永久绑定）。清缓存使下次 WebDAV 请求按新 path 重建，
+    // 避免出现 HTTP 服务新目录、WebDAV 仍写旧目录的视图分裂。
+    crate::router::clear_dav_handler_cache();
     debug!(target: "static", name = %name_trimmed, path = %new_path_trimmed, "static updated");
     Ok(updated)
 }
 
-/// 删除指定的静态文件桶记录（仅删数据库行，不删除磁盘文件）。
+/// 删除桶对应的磁盘子目录（防穿越校验）。
+///
+/// 供 `delete_static` 在删 DB 行后清理磁盘孤儿文件。目录不存在视为成功（幂等）。
+async fn delete_static_bucket_dir(bucket_sub_path: &str) -> anyhow::Result<()> {
+    validate_sub_path(bucket_sub_path)?;
+    let static_path = get_static_path();
+    let dir = Path::new(&*static_path).join(bucket_sub_path);
+    if dir.exists() {
+        tokio::fs::remove_dir_all(&dir).await?;
+    }
+    Ok(())
+}
+
+/// 删除指定的静态文件桶记录，并清理对应磁盘目录。
 ///
 /// - `name` - 目标桶名称，需通过 [`validate_name`] 校验
 ///
@@ -392,7 +421,8 @@ pub async fn update_static(
 /// 1. 校验 name 合法性
 /// 2. 查询数据库确认存在
 /// 3. 按主键删除数据库行
-/// 4. 刷新 [`StaticCache`]
+/// 4. 删除桶磁盘目录（防穿越校验，失败仅告警不回滚 DB——DB 为 source of truth）
+/// 5. 刷新 [`StaticCache`]
 pub async fn delete_static(name: &str) -> anyhow::Result<()> {
     let db = get_db().context("DB not initialized")?;
     let name_trimmed = name.trim();
@@ -404,11 +434,26 @@ pub async fn delete_static(name: &str) -> anyhow::Result<()> {
         .await?
         .ok_or_else(|| NodegetError::NotFound(format!("Static '{name_trimmed}' not found")))?;
 
+    // 先记下桶磁盘子目录（删除 DB 行后 model 仍持有 path，但提前取更清晰）
+    let bucket_sub_path = model.path.clone();
+
     static_entity::Entity::delete_by_id(model.id)
         .exec(db)
         .await?;
 
+    // 删除桶磁盘目录，避免孤儿文件泄漏（此前仅删 DB 行，桶目录下文件永久残留，
+    // 且桶从 StaticCache 移除后无法再经 RPC 清理）。见 REVIEW M4。
+    // 防穿越：复用 validate_sub_path 校验 model.path，确保删除目标在 static_path 之下。
+    // 磁盘删除失败不回滚 DB（DB 是 source of truth，残留目录可由运维后续清理），
+    // 与 update_static 中 create_dir_all 失败仅 warn 的策略一致。
+    if let Err(e) = delete_static_bucket_dir(&bucket_sub_path).await {
+        warn!(target: "static", name = %name_trimmed, sub_path = %bucket_sub_path, error = %e, "Failed to remove bucket directory after delete_static (orphan files may remain)");
+    }
+
     StaticCache::reload().await?;
+    // 桶删除后，清理 DavHandler 缓存中该 name 残留的 handler（否则同名桶重建
+    // 前会复用指向旧磁盘路径的 handler）。
+    crate::router::clear_dav_handler_cache();
     debug!(target: "static", name = %name_trimmed, "static deleted");
     Ok(())
 }
@@ -502,6 +547,25 @@ pub async fn read_file(name: &str, file_path: &str) -> anyhow::Result<String> {
     let static_path = get_static_path();
     let resolved = resolve_safe_file_path(&static_path, &model.path, file_path)?;
 
+    // 文件大小守卫：与 HTTP 静态路由共用 MAX_STATIC_FILE_SIZE（8 MiB），
+    // 避免超大文件经 RPC 全量 slurp + base64（~1.33x）膨胀致 OOM。
+    // 之前 RPC 路径无此守卫（仅 HTTP 路径有），形成保护非对称。
+    let metadata = tokio::fs::metadata(&resolved).await.map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            NodegetError::NotFound(format!("File not found: {file_path}"))
+        } else {
+            NodegetError::IoError(format!("Failed to stat file: {e}"))
+        }
+    })?;
+    if metadata.len() > crate::router::MAX_STATIC_FILE_SIZE {
+        return Err(NodegetError::InvalidInput(format!(
+            "File too large ({} bytes, max {}); use WebDAV for large files",
+            metadata.len(),
+            crate::router::MAX_STATIC_FILE_SIZE
+        ))
+        .into());
+    }
+
     let data = tokio::fs::read(&resolved).await.map_err(|e| {
         if e.kind() == std::io::ErrorKind::NotFound {
             NodegetError::NotFound(format!("File not found: {file_path}"))
@@ -570,7 +634,7 @@ pub async fn list_file(name: &str) -> anyhow::Result<Vec<FileInfo>> {
         .ok_or_else(|| NodegetError::NotFound(format!("Static '{name}' not found")))?;
 
     let static_path = get_static_path();
-    let base = Path::new(&static_path).join(&model.path);
+    let base = Path::new(&*static_path).join(&model.path);
 
     let files = tokio::task::spawn_blocking(move || collect_files(&base))
         .await

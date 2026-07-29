@@ -1,11 +1,13 @@
 //! `task_query` RPC 方法：按条件查询任务记录
 
+use super::escape_like_pattern;
 use crate::types::query::{TaskDataQuery, TaskQueryCondition};
 use futures_util::StreamExt;
 use jsonrpsee::core::RpcResult;
 use ng_core::error::NodegetError;
 use ng_core::permission::data_structure::{Permission, Scope, Task};
 use ng_core::permission::token_auth::TokenOrAuth;
+use ng_core::utils::{DEFAULT_RESULT_QUERY_LIMIT, MAX_QUERY_LIMIT};
 use ng_db::entity::task;
 use ng_db::rpc::RpcHelper;
 use sea_orm::sea_query::{Alias, BinOper, Expr, LikeExpr};
@@ -14,14 +16,6 @@ use sea_orm::{
 };
 use serde_json::value::RawValue;
 use tracing::{debug, error};
-
-/// 转义 SQL LIKE 特殊字符，防止注入攻击
-///
-/// SQL LIKE 中 `%` 匹配任意字符序列，`_` 匹配单个字符，
-/// 这些字符需要转义才能在 JSON 文本搜索中进行精确匹配
-fn escape_like_pattern(pattern: &str) -> String {
-    pattern.replace('%', r"\%").replace('_', r"\_")
-}
 
 /// 按条件查询任务记录，流式序列化返回
 ///
@@ -44,6 +38,8 @@ pub async fn query(token: String, task_data_query: TaskDataQuery) -> RpcResult<B
         let token_or_auth = TokenOrAuth::from_full_token(&token)
             .map_err(|e| NodegetError::ParseError(format!("Failed to parse token: {e}")))?;
 
+        // 任务类型白名单：必须与 `TaskEventType::task_name()`（types/mod.rs）逐项对齐，
+        // 否则未指定 Type 条件时枚举鉴权会漏掉某个类型。
         let all_task_types = [
             "ping",
             "tcp_ping",
@@ -56,6 +52,7 @@ pub async fn query(token: String, task_data_query: TaskDataQuery) -> RpcResult<B
             "ip",
             "version",
             "dns",
+            "self_update",
         ];
 
         let mut scopes = Vec::new();
@@ -179,7 +176,9 @@ pub async fn query(token: String, task_data_query: TaskDataQuery) -> RpcResult<B
                 }
 
                 TaskQueryCondition::Limit(n) => {
-                    limit_count = Some(n);
+                    // 钳制上限，避免 `n*500` 预分配回绕 / DB 物化海量行导致 OOM。
+                    // 与 crontab_result/js_result 的 MAX_QUERY_LIMIT=10000 对齐。
+                    limit_count = Some(std::cmp::min(n, MAX_QUERY_LIMIT));
                 }
 
                 TaskQueryCondition::Last => {
@@ -188,9 +187,7 @@ pub async fn query(token: String, task_data_query: TaskDataQuery) -> RpcResult<B
             }
         }
 
-        /// 默认查询上限 1000 条，客户端需要更多时须显式指定 `Limit` 条件
-        const DEFAULT_LIMIT: u64 = 1000;
-
+        // 默认查询上限 1000 条，客户端需要更多时须显式指定 `Limit` 条件
         if is_last {
             query = query
                 .order_by(task::Column::Timestamp, Order::Desc)
@@ -205,7 +202,7 @@ pub async fn query(token: String, task_data_query: TaskDataQuery) -> RpcResult<B
             query = query
                 .order_by(task::Column::Timestamp, Order::Asc)
                 .order_by(task::Column::Id, Order::Asc)
-                .limit(DEFAULT_LIMIT);
+                .limit(DEFAULT_RESULT_QUERY_LIMIT);
         }
 
         let mut stream = query.into_json().stream(db).await.map_err(|e| {
@@ -213,7 +210,9 @@ pub async fn query(token: String, task_data_query: TaskDataQuery) -> RpcResult<B
             NodegetError::DatabaseError(format!("Database query error: {e}"))
         })?;
 
-        let capacity = limit_count.unwrap_or(DEFAULT_LIMIT) as usize * 500;
+        let capacity = limit_count
+            .unwrap_or(DEFAULT_RESULT_QUERY_LIMIT)
+            .saturating_mul(500) as usize;
         let mut output_buffer: Vec<u8> = Vec::with_capacity(capacity);
 
         output_buffer.push(b'[');

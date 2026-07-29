@@ -9,10 +9,11 @@ use ng_core::permission::token_auth::TokenOrAuth;
 use ng_core::utils::generate_random_string;
 use ng_db::entity::task;
 use ng_db::rpc::RpcHelper;
+use ng_db::rpc::to_rpc_error;
 use sea_orm::{ActiveValue, EntityTrait, Set};
 use serde_json::value::RawValue;
 use std::sync::Arc;
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 use uuid::Uuid;
 
 /// 校验任务类型参数是否合法
@@ -106,7 +107,9 @@ pub async fn create_task(
 
         // Ensure the uuid is registered in the monitoring_uuid table (authoritative Agent table)
         if let Some(uuid_provider) = crate::rpc::monitoring_uuid_provider() {
-            let _ = uuid_provider.get_or_insert(target_uuid).await;
+            if let Err(e) = uuid_provider.get_or_insert(target_uuid).await {
+                warn!(target: "task", uuid = %target_uuid, error = %e, "Failed to register monitoring_uuid; agent will re-register on next report");
+            }
         }
 
         let task = TaskEvent {
@@ -122,32 +125,34 @@ pub async fn create_task(
                     .map_err(|e| NodegetError::SerializationError(e.to_string()).into())
             }
             Err(e) => {
-                let _ = task::Entity::delete_by_id(task_id)
-                    .exec(db)
-                    .await
-                    .map_err(|del_err| {
-                        error!(target: "task", error = %del_err, "Database delete error during rollback");
-                        NodegetError::DatabaseError(format!("Database delete error: {del_err}"))
-                    });
+                // 回滚刚创建的 task 行。回滚失败对调用方原本不可见（错误被 let _ = 丢弃），
+                // 现把回滚失败信息附进错误消息，便于运维据消息定位需手动清理的残留 task 行。
+                let rollback_failed = match task::Entity::delete_by_id(task_id).exec(db).await {
+                    Ok(_) => false,
+                    Err(del_err) => {
+                        error!(
+                            target: "task",
+                            task_id,
+                            error = %del_err,
+                            "Database delete error during rollback (task row may need manual cleanup)"
+                        );
+                        true
+                    }
+                };
                 error!(target: "task", error = %e.1, "Error sending task event");
-                Err(NodegetError::AgentConnectionError(format!(
-                    "Error sending task event: {}",
-                    e.1
-                ))
-                .into())
+                let mut msg = format!("Error sending task event: {}", e.1);
+                if rollback_failed {
+                    msg.push_str(
+                        "; rollback also failed, see logs (task row may need manual cleanup)",
+                    );
+                }
+                Err(NodegetError::AgentConnectionError(msg).into())
             }
         }
     };
 
     match process_logic.await {
         Ok(result) => Ok(result),
-        Err(e) => {
-            let nodeget_err = ng_core::error::anyhow_to_nodeget_error(&e);
-            Err(jsonrpsee::types::ErrorObject::owned(
-                nodeget_err.error_code() as i32,
-                format!("{nodeget_err}"),
-                None::<()>,
-            ))
-        }
+        Err(e) => Err(to_rpc_error(&e)),
     }
 }

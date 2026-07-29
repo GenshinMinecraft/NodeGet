@@ -7,7 +7,7 @@ repository.workspace = true
 
 [features]
 default = []
-server = ["dep:sea-orm", "dep:serde_json", "dep:ng-db"]
+server = ["dep:sea-orm", "dep:serde_json", "dep:ng-db", "ng-db/server"]
 
 [dependencies]
 ng-core = { workspace = true }

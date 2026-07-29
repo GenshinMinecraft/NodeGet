@@ -28,6 +28,17 @@ use tokio::sync::{RwLock, mpsc, oneshot};
 use tracing::{Instrument, debug, trace, warn};
 use uuid::Uuid;
 
+/// 转义 SQL LIKE 特殊字符，防止注入攻击。
+///
+/// SQL LIKE 中 `%` 匹配任意字符序列，`_` 匹配单个字符，这些字符需要转义才能在
+/// JSON 文本搜索中进行精确匹配。配合 `.escape('\\')` 使用。
+pub(crate) fn escape_like_pattern(pattern: &str) -> String {
+    pattern
+        .replace('\\', r"\\")
+        .replace('%', r"\%")
+        .replace('_', r"\_")
+}
+
 mod create_task;
 mod create_task_blocking;
 mod delete;
@@ -453,10 +464,20 @@ impl TaskManager {
             }
         };
 
-        tx.send(event)
-            .await
-            .map_err(|e| (103, format!("Failed to send task event: {e}")))?;
-        Ok(())
+        // 用 try_send 而非 send().await：agent 任务队列（容量 32）满时立即返回错误，
+        // 而非阻塞挂起 RPC handler 等待排空（慢 agent 场景下会拖挂 create_task）。
+        // 调用方可据此向客户端返回 503/重试提示。
+        match tx.try_send(event) {
+            Ok(()) => Ok(()),
+            Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => {
+                warn!(target: "task", uuid = %uuid, "agent task queue full (cap 32)");
+                Err((104, format!("Agent {uuid} task queue is full")))
+            }
+            Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => {
+                warn!(target: "task", uuid = %uuid, "agent disconnected during send");
+                Err((104, format!("Agent {uuid} is not connected")))
+            }
+        }
     }
 
     /// 注册一个 blocking waiter，等待指定 `task_id` 的结果

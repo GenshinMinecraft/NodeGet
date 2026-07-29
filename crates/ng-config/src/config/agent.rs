@@ -290,6 +290,13 @@ impl AgentConfig {
                 warn!(target: "config", "配置验证失败: dynamic_summary_report_interval_ms 不能为 0");
                 return Err("dynamic_summary_report_interval_ms must be greater than 0".into());
             }
+            // dynamic_report_interval_ms == 0 时，运行期 ticks_per_dynamic = 0/N = 0，
+            // 会使「tick_count >= ticks_per_dynamic」恒真（每 tick 都发 dynamic），
+            // 且 0 作为退化非法间隔应被显式拒绝（0 % N == 0 会绕过下方的倍数检查）。
+            if dynamic_interval == 0 {
+                warn!(target: "config", "配置验证失败: dynamic_report_interval_ms 不能为 0");
+                return Err("dynamic_report_interval_ms must be greater than 0".into());
+            }
             if !dynamic_interval.is_multiple_of(summary_interval) {
                 warn!(target: "config", "配置验证失败: dynamic_report_interval_ms ({dynamic_interval}) 不是 dynamic_summary_report_interval_ms ({summary_interval}) 的整数倍");
                 return Err(format!(

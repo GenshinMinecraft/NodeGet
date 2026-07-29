@@ -27,6 +27,13 @@ use tracing::{debug, error, info, warn};
 use crate::cache::StaticCache;
 use crate::ops::{get_static_path, resolve_safe_file_path};
 
+/// 静态文件单次读取/响应的大小上限（8 MiB）。
+///
+/// HTTP 静态路由（`serve_static_file`）与 RPC `static-bucket-file.read` 共用此上限，
+/// 避免超大文件被全量 slurp 进内存（+ base64 ~1.33x 膨胀）导致 OOM。
+/// 大文件应经 WebDAV 或专用 CDN 分发，而非全量缓冲路径。
+pub(crate) const MAX_STATIC_FILE_SIZE: u64 = 8 * 1024 * 1024;
+
 /// Global cache of DavHandler instances keyed by bucket name.
 /// Avoids re-allocating LocalFs, FakeLs, and DavHandler config on every WebDAV request.
 static DAV_HANDLER_CACHE: OnceLock<RwLock<HashMap<String, DavHandler>>> = OnceLock::new();
@@ -43,7 +50,7 @@ pub fn clear_dav_handler_cache() {
     if let Some(cache) = DAV_HANDLER_CACHE.get() {
         cache
             .write()
-            .expect("DAV handler cache lock poisoned")
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clear();
     }
 }
@@ -59,7 +66,7 @@ fn get_or_create_dav_handler(bucket_name: &str, disk_path: &std::path::Path) -> 
     // Slow path: write lock
     let mut cache = dav_handler_cache()
         .write()
-        .expect("DAV handler cache lock poisoned");
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     // Double-check after acquiring write lock
     if let Some(handler) = cache.get(bucket_name) {
         return handler.clone();
@@ -91,8 +98,8 @@ pub fn router() -> axum::Router {
                     let Some(model) = cache.get_by_name(&name) else {
                         return build_http_error(StatusCode::NOT_FOUND, "Static not found");
                     };
-                    // enable == Some(false) 视为不存在，返回 404
-                    if model.enable != Some(false) {
+                    // enable == false 视为不存在，返回 404（enable 列已 NOT NULL，见 L33）
+                    if model.enable {
                         if req.method() == axum::http::Method::OPTIONS && model.cors {
                             return axum::http::Response::builder()
                                 .status(StatusCode::NO_CONTENT)
@@ -122,8 +129,8 @@ pub fn router() -> axum::Router {
                     let Some(model) = cache.get_by_name(&name) else {
                         return build_http_error(StatusCode::NOT_FOUND, "Static not found");
                     };
-                    // enable == Some(false) 视为不存在，返回 404
-                    if model.enable != Some(false) {
+                    // enable == false 视为不存在，返回 404（enable 列已 NOT NULL，见 L33）
+                    if model.enable {
                         // 处理 OPTIONS 预检请求
                         if req.method() == axum::http::Method::OPTIONS && model.cors {
                             return axum::http::Response::builder()
@@ -239,6 +246,22 @@ async fn serve_static_file(
         }
     };
 
+    // 文件大小上限：避免把超大文件全量读进内存（tokio::fs::read）导致 OOM。
+    // 超限返回 413，而不是分配 N×文件大小 的堆内存（并发放大）。
+    // 大文件应通过 WebDAV 或专用 CDN 分发，而非 HTTP 静态路由全量缓冲。
+    // 上限值统一于模块级 `MAX_STATIC_FILE_SIZE`，与 RPC `static-bucket-file.read` 对齐。
+    if metadata.len() > MAX_STATIC_FILE_SIZE {
+        return build_static_error(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            format!(
+                "File too large ({} bytes, max {}); use WebDAV for large files",
+                metadata.len(),
+                MAX_STATIC_FILE_SIZE
+            ),
+            cors,
+        );
+    }
+
     // ETag = 修改时间(秒) + 字节数，弱验证器。仅用于缓存命中判断，非内容哈希。
     let etag = build_etag(&metadata);
 
@@ -246,7 +269,8 @@ async fn serve_static_file(
     if if_none_match_is_match(if_none_match, &etag) {
         let mut builder = axum::http::Response::builder()
             .status(StatusCode::NOT_MODIFIED)
-            .header(axum::http::header::ETAG, etag.as_str());
+            .header(axum::http::header::ETAG, etag.as_str())
+            .header("X-Content-Type-Options", "nosniff");
         if cors {
             builder = builder.header(axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*");
         }
@@ -266,7 +290,14 @@ async fn serve_static_file(
     let mut builder = axum::http::Response::builder()
         .status(StatusCode::OK)
         .header(axum::http::header::CONTENT_TYPE, content_type)
-        .header(axum::http::header::ETAG, etag.as_str());
+        .header(axum::http::header::ETAG, etag.as_str())
+        // Content-Length 必须显式给出：HEAD 请求返回空 body，否则 hyper 会推断出
+        // `Content-Length: 0`，与 GET 的真实实体大小不一致，违反 RFC 9110（HEAD 应反映
+        // GET 的实体元信息）。GET 路径给出正确值同样无害。
+        .header(axum::http::header::CONTENT_LENGTH, data.len().to_string())
+        // 防止浏览器对响应做 MIME 嗅探,强制按 Content-Type 解释(配合用户上传内容,
+        // 避免 octet-stream 被嗅探成可执行类型)。
+        .header("X-Content-Type-Options", "nosniff");
 
     if cors {
         builder = builder.header(axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*");
@@ -355,6 +386,12 @@ async fn static_webdav_handler(req: axum::extract::Request) -> axum::response::R
         warn!(target: "webdav", method = %method, uri = %uri_path, bucket = %name, "bucket not found");
         return build_webdav_error(StatusCode::NOT_FOUND, "Static bucket not found");
     };
+    // 与 HTTP GET 路径一致：enable == false 视为桶已下线，拒绝访问（enable 列已 NOT NULL，见 L33）。
+    // 否则会出现「HTTP 已 404 但 WebDAV 仍开放读写删」的访问控制不一致。
+    if !model.enable {
+        debug!(target: "webdav", method = %method, uri = %uri_path, bucket = %name, "bucket disabled, treating as not found");
+        return build_webdav_error(StatusCode::NOT_FOUND, "Static bucket not found");
+    }
     debug!(target: "webdav", bucket = %name, path = %model.path, cors = model.cors, "bucket resolved");
 
     // 2. Extract Basic Auth
@@ -449,7 +486,7 @@ async fn static_webdav_handler(req: axum::extract::Request) -> axum::response::R
 
     // 5. Serve via WebDAV
     let static_path = get_static_path();
-    let disk_path = std::path::PathBuf::from(&static_path).join(&model.path);
+    let disk_path = std::path::PathBuf::from(&*static_path).join(&model.path);
 
     info!(target: "webdav", bucket = %name, username = %username, disk_path = %disk_path.display(), method = %method, "serving webdav request");
 
@@ -475,6 +512,7 @@ fn build_webdav_auth_required() -> axum::response::Response {
             axum::http::header::WWW_AUTHENTICATE,
             "Basic realm=\"NodeGet Static WebDAV\"",
         )
+        .header("X-Content-Type-Options", "nosniff")
         .body(axum::body::Body::from("Authentication required"))
         .expect("Failed to build response")
 }
@@ -487,6 +525,7 @@ fn build_webdav_error(status: StatusCode, message: impl Into<String>) -> axum::r
             axum::http::header::CONTENT_TYPE,
             "text/plain; charset=utf-8",
         )
+        .header("X-Content-Type-Options", "nosniff")
         .body(axum::body::Body::from(message.into()))
         .expect("Failed to build response")
 }
@@ -502,6 +541,7 @@ fn build_http_error(
             axum::http::header::CONTENT_TYPE,
             "text/plain; charset=utf-8",
         )
+        .header("X-Content-Type-Options", "nosniff")
         .body(jsonrpsee::server::HttpBody::from(message.into()))
         .expect("Failed to build error response")
 }
@@ -515,7 +555,7 @@ fn build_static_error(
     let mut builder = axum::http::Response::builder().status(status).header(
         axum::http::header::CONTENT_TYPE,
         "text/plain; charset=utf-8",
-    );
+    ).header("X-Content-Type-Options", "nosniff");
     if cors {
         builder = builder.header(axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*");
     }

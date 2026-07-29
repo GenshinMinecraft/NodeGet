@@ -2,9 +2,11 @@
 
 use crate::query::{CrontabResultDataQuery, CrontabResultQueryCondition};
 use jsonrpsee::core::RpcResult;
-use ng_core::error::{NodegetError, anyhow_to_nodeget_error};
+use ng_core::error::NodegetError;
+use ng_core::utils::MAX_QUERY_LIMIT;
 use ng_db::entity::crontab_result;
 use ng_db::get_db;
+use ng_infra::server::to_rpc_error;
 use sea_orm::{ColumnTrait, EntityTrait, ExprTrait, QueryFilter, QueryOrder, QuerySelect};
 use serde_json::value::RawValue;
 use std::collections::HashSet;
@@ -105,8 +107,7 @@ pub async fn delete(token: String, query: CrontabResultDataQuery) -> RpcResult<B
                     delete_query = delete_query.filter(crontab_result::Column::Success.eq(false));
                 }
                 CrontabResultQueryCondition::Limit(limit) => {
-                    const MAX_LIMIT: u64 = 10_000;
-                    limit_count = Some(std::cmp::min(limit, MAX_LIMIT));
+                    limit_count = Some(std::cmp::min(limit, MAX_QUERY_LIMIT));
                 }
                 CrontabResultQueryCondition::Last => {
                     is_last = true;
@@ -156,8 +157,7 @@ pub async fn delete(token: String, query: CrontabResultDataQuery) -> RpcResult<B
         let response = serde_json::json!({
             "success": true,
             "deleted": deleted_rows,
-            "condition_count": condition_count,
-        });
+            "condition_count": condition_count});
 
         debug!(target: "crontab_result", deleted_rows, condition_count, "crontab_result delete completed");
 
@@ -167,13 +167,6 @@ pub async fn delete(token: String, query: CrontabResultDataQuery) -> RpcResult<B
 
     match process_logic.await {
         Ok(result) => Ok(result),
-        Err(e) => {
-            let nodeget_err = anyhow_to_nodeget_error(&e);
-            Err(jsonrpsee::types::ErrorObject::owned(
-                nodeget_err.error_code() as i32,
-                format!("{nodeget_err}"),
-                None::<()>,
-            ))
-        }
+        Err(e) => Err(to_rpc_error(&e)),
     }
 }

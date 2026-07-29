@@ -6,7 +6,7 @@
 use crate::query::QueryCondition;
 use crate::rpc::agent::AgentRpcImpl;
 use crate::rpc::agent::delete_common::{
-    ResolvedCondition, extract_limit_and_last, resolve_conditions, scopes_from_conditions,
+    apply_resolved_conditions, extract_limit_and_last, resolve_conditions, scopes_from_conditions,
 };
 use jsonrpsee::core::RpcResult;
 use ng_core::error::NodegetError;
@@ -14,8 +14,9 @@ use ng_core::permission::data_structure::{Permission, StaticMonitoring};
 use ng_core::permission::token_auth::TokenOrAuth;
 use ng_db::entity::static_monitoring;
 use ng_infra::server::RpcHelper;
+use ng_infra::server::to_rpc_error;
 use ng_token::get::check_token_limit;
-use sea_orm::{ColumnTrait, EntityTrait, ExprTrait, QueryFilter, QueryOrder, QuerySelect};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
 use serde_json::value::RawValue;
 use tracing::{debug, error, warn};
 
@@ -65,40 +66,13 @@ pub async fn delete_static(
         debug!(target: "monitoring", ?limit_count, is_last, "delete_static: executing delete");
 
         let rows_affected = if is_last || limit_count.is_some() {
-            let mut query = static_monitoring::Entity::find();
-            for cond in &resolved_conditions {
-                match cond {
-                    ResolvedCondition::UuidId(uuid_id) => {
-                        query = query.filter(static_monitoring::Column::UuidId.eq(*uuid_id));
-                    }
-                    ResolvedCondition::TimestampFromTo(start, end) => {
-                        query = query.filter(
-                            static_monitoring::Column::Timestamp
-                                .gte(*start)
-                                .and(static_monitoring::Column::Timestamp.lte(*end)),
-                        );
-                    }
-                    ResolvedCondition::TimestampFrom(start) => {
-                        query = query.filter(static_monitoring::Column::Timestamp.gte(*start));
-                    }
-                    ResolvedCondition::TimestampTo(end) => {
-                        query = query.filter(static_monitoring::Column::Timestamp.lte(*end));
-                    }
-                    ResolvedCondition::StorageTimeFromTo(start, end) => {
-                        query = query.filter(
-                            static_monitoring::Column::StorageTime
-                                .gte(*start)
-                                .and(static_monitoring::Column::StorageTime.lte(*end)),
-                        );
-                    }
-                    ResolvedCondition::StorageTimeFrom(start) => {
-                        query = query.filter(static_monitoring::Column::StorageTime.gte(*start));
-                    }
-                    ResolvedCondition::StorageTimeTo(end) => {
-                        query = query.filter(static_monitoring::Column::StorageTime.lte(*end));
-                    }
-                }
-            }
+            let query = apply_resolved_conditions::<static_monitoring::Entity, _>(
+                static_monitoring::Entity::find(),
+                &resolved_conditions,
+                static_monitoring::Column::UuidId,
+                static_monitoring::Column::Timestamp,
+                static_monitoring::Column::StorageTime,
+            );
 
             let limit = if is_last { 1 } else { limit_count.unwrap_or(0) };
             let ids: Vec<i64> = query
@@ -130,40 +104,13 @@ pub async fn delete_static(
                     .rows_affected
             }
         } else {
-            let mut query = static_monitoring::Entity::delete_many();
-            for cond in &resolved_conditions {
-                match cond {
-                    ResolvedCondition::UuidId(uuid_id) => {
-                        query = query.filter(static_monitoring::Column::UuidId.eq(*uuid_id));
-                    }
-                    ResolvedCondition::TimestampFromTo(start, end) => {
-                        query = query.filter(
-                            static_monitoring::Column::Timestamp
-                                .gte(*start)
-                                .and(static_monitoring::Column::Timestamp.lte(*end)),
-                        );
-                    }
-                    ResolvedCondition::TimestampFrom(start) => {
-                        query = query.filter(static_monitoring::Column::Timestamp.gte(*start));
-                    }
-                    ResolvedCondition::TimestampTo(end) => {
-                        query = query.filter(static_monitoring::Column::Timestamp.lte(*end));
-                    }
-                    ResolvedCondition::StorageTimeFromTo(start, end) => {
-                        query = query.filter(
-                            static_monitoring::Column::StorageTime
-                                .gte(*start)
-                                .and(static_monitoring::Column::StorageTime.lte(*end)),
-                        );
-                    }
-                    ResolvedCondition::StorageTimeFrom(start) => {
-                        query = query.filter(static_monitoring::Column::StorageTime.gte(*start));
-                    }
-                    ResolvedCondition::StorageTimeTo(end) => {
-                        query = query.filter(static_monitoring::Column::StorageTime.lte(*end));
-                    }
-                }
-            }
+            let query = apply_resolved_conditions::<static_monitoring::Entity, _>(
+                static_monitoring::Entity::delete_many(),
+                &resolved_conditions,
+                static_monitoring::Column::UuidId,
+                static_monitoring::Column::Timestamp,
+                static_monitoring::Column::StorageTime,
+            );
             query
                 .exec(db)
                 .await
@@ -186,13 +133,6 @@ pub async fn delete_static(
 
     match process_logic.await {
         Ok(result) => Ok(result),
-        Err(e) => {
-            let nodeget_err = ng_core::error::anyhow_to_nodeget_error(&e);
-            Err(jsonrpsee::types::ErrorObject::owned(
-                nodeget_err.error_code() as i32,
-                format!("{nodeget_err}"),
-                None::<()>,
-            ))
-        }
+        Err(e) => Err(to_rpc_error(&e)),
     }
 }

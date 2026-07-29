@@ -5,7 +5,7 @@
 //! - `TaskEventResponse` — task result upload structure
 //! - `WebShellTask`, `ExecuteTask`, `HttpRequestTask`, `DnsTask` — parameter types
 //! - `DnsRecordResult`, `HttpRequestTaskResult` — result types
-//! - `query` module — `TaskQueryCondition`, `TaskDataQuery`, `TaskResponseItem`
+//! - `query` module — `TaskQueryCondition`, `TaskDataQuery`
 //!
 //! ## `server` feature
 //! - `TaskManager` — broadcast channel manager for task events

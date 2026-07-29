@@ -6,6 +6,7 @@ use crate::rpc::{to_rpc_error, token_identity};
 use jsonrpsee::core::RpcResult;
 use ng_core::error::NodegetError;
 use ng_core::permission::data_structure::Db as DbPermission;
+use ng_core::utils::EXEC_SQL_RESULT_TRUNCATE_LIMIT;
 use sea_orm::ConnectionTrait;
 use serde_json::value::RawValue;
 use tracing::debug;
@@ -57,9 +58,9 @@ pub async fn exec_sql_inner(
 
     let mut rows = db_conn.query_all_raw(stmt).await?;
     let total_count = rows.len() as u64;
-    let truncated = rows.len() > 10_000;
+    let truncated = rows.len() > EXEC_SQL_RESULT_TRUNCATE_LIMIT;
     if truncated {
-        rows.truncate(10_000);
+        rows.truncate(EXEC_SQL_RESULT_TRUNCATE_LIMIT);
     }
     let json_rows: Vec<serde_json::Value> = rows.iter().map(row_to_json).collect();
 

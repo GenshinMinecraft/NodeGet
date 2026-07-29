@@ -10,8 +10,10 @@ use jsonrpsee::core::RpcResult;
 use ng_core::error::NodegetError;
 use ng_core::js_result::query::JsResultDataQuery;
 use ng_core::js_result::query::JsResultQueryCondition;
+use ng_core::utils::MAX_QUERY_LIMIT;
 use ng_db::entity::js_result;
 use ng_db::get_db;
+use ng_infra::server::to_rpc_error;
 use sea_orm::{ColumnTrait, EntityTrait, ExprTrait, QueryFilter, QueryOrder, QuerySelect};
 use serde_json::value::RawValue;
 use tracing::debug;
@@ -179,8 +181,7 @@ pub async fn delete(token: String, query: JsResultDataQuery) -> RpcResult<Box<Ra
                 }
                 JsResultQueryCondition::Limit(limit) => {
                     // 单次删除上限 10000 条，防止误操作删除过多数据
-                    const MAX_LIMIT: u64 = 10_000;
-                    limit_count = Some(std::cmp::min(limit, MAX_LIMIT));
+                    limit_count = Some(std::cmp::min(limit, MAX_QUERY_LIMIT));
                 }
                 JsResultQueryCondition::Last => {
                     is_last = true;
@@ -244,13 +245,6 @@ pub async fn delete(token: String, query: JsResultDataQuery) -> RpcResult<Box<Ra
 
     match process_logic.await {
         Ok(result) => Ok(result),
-        Err(e) => {
-            let nodeget_err = ng_core::error::anyhow_to_nodeget_error(&e);
-            Err(jsonrpsee::types::ErrorObject::owned(
-                nodeget_err.error_code() as i32,
-                format!("{nodeget_err}"),
-                None::<()>,
-            ))
-        }
+        Err(e) => Err(to_rpc_error(&e)),
     }
 }

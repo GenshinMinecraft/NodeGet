@@ -7,6 +7,8 @@ use crate::monitoring_uuid_cache::MonitoringUuidCache;
 use crate::query::QueryCondition;
 use ng_core::error::NodegetError;
 use ng_core::permission::data_structure::Scope;
+use ng_core::utils::MAX_QUERY_LIMIT;
+use sea_orm::{ColumnTrait, EntityTrait, ExprTrait, QueryFilter};
 use std::collections::HashSet;
 use tracing::warn;
 
@@ -37,6 +39,9 @@ pub fn scopes_from_conditions(conditions: &[QueryCondition]) -> Vec<Scope> {
 /// 从查询条件中提取 Limit 值和 Last 标记。
 ///
 /// - 返回值 — `(limit_count, is_last)`
+///
+/// Limit 会被钳制到 `MAX_QUERY_LIMIT`(与 `crontab_result`/`js_result`/`task.query` 对齐),
+/// 避免 select 出海量 id 致 `Vec<i64>` OOM。
 pub fn extract_limit_and_last(conditions: &[QueryCondition]) -> (Option<u64>, bool) {
     let mut limit_count = None;
     let mut is_last = false;
@@ -44,7 +49,7 @@ pub fn extract_limit_and_last(conditions: &[QueryCondition]) -> (Option<u64>, bo
     for cond in conditions {
         match cond {
             QueryCondition::Limit(n) => {
-                limit_count = Some(*n);
+                limit_count = Some(std::cmp::min(*n, MAX_QUERY_LIMIT));
             }
             QueryCondition::Last => {
                 is_last = true;
@@ -126,4 +131,53 @@ pub async fn resolve_conditions(
     }
 
     Ok(resolved)
+}
+
+/// 将 `ResolvedCondition` 列表应用到 SeaORM 查询（见 REVIEW M14）。
+///
+/// 此前 delete_static / delete_dynamic / delete_dynamic_summary 各自内联一份
+/// 7-arm `match`（仅 Column 不同），近 42 个重复 arm。本泛型 helper 统一逻辑，
+/// 调用方传入对应 Entity 的 `UuidId` / `Timestamp` / `StorageTime` 三列。
+///
+/// - `query` — 待附加过滤的查询（`Select<E>` 或 `DeleteMany<E>`，均实现 `QueryFilter`）
+/// - `resolved` — 已解析的条件（UUID 已转 id）
+/// - `uuid_id_col` / `timestamp_col` / `storage_time_col` — 对应表的列
+pub fn apply_resolved_conditions<E, Q>(
+    mut query: Q,
+    resolved: &[ResolvedCondition],
+    uuid_id_col: E::Column,
+    timestamp_col: E::Column,
+    storage_time_col: E::Column,
+) -> Q
+where
+    E: EntityTrait,
+    E::Column: ColumnTrait,
+    Q: QueryFilter,
+{
+    for cond in resolved {
+        match cond {
+            ResolvedCondition::UuidId(uuid_id) => {
+                query = query.filter(uuid_id_col.eq(*uuid_id));
+            }
+            ResolvedCondition::TimestampFromTo(start, end) => {
+                query = query.filter(timestamp_col.gte(*start).and(timestamp_col.lte(*end)));
+            }
+            ResolvedCondition::TimestampFrom(start) => {
+                query = query.filter(timestamp_col.gte(*start));
+            }
+            ResolvedCondition::TimestampTo(end) => {
+                query = query.filter(timestamp_col.lte(*end));
+            }
+            ResolvedCondition::StorageTimeFromTo(start, end) => {
+                query = query.filter(storage_time_col.gte(*start).and(storage_time_col.lte(*end)));
+            }
+            ResolvedCondition::StorageTimeFrom(start) => {
+                query = query.filter(storage_time_col.gte(*start));
+            }
+            ResolvedCondition::StorageTimeTo(end) => {
+                query = query.filter(storage_time_col.lte(*end));
+            }
+        }
+    }
+    query
 }

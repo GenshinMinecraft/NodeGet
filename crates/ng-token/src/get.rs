@@ -84,11 +84,11 @@ pub async fn get_token(token_or_auth: &TokenOrAuth) -> anyhow::Result<Token> {
 
     Ok(Token {
         version: cached_token.model.version,
-        token_key: cached_token.model.token_key.clone(),
+        token_key: Arc::from(cached_token.model.token_key.as_str()),
         timestamp_from: cached_token.model.time_stamp_from,
         timestamp_to: cached_token.model.time_stamp_to,
         token_limit: Arc::clone(&cached_token.parsed_limits),
-        username: cached_token.model.username.clone(),
+        username: cached_token.model.username.as_deref().map(Arc::from),
     })
 }
 
@@ -122,11 +122,11 @@ pub async fn get_token_by_key_or_username(identifier: &str) -> anyhow::Result<To
 
     Ok(Token {
         version: cached_token.model.version,
-        token_key: cached_token.model.token_key.clone(),
+        token_key: Arc::from(cached_token.model.token_key.as_str()),
         timestamp_from: cached_token.model.time_stamp_from,
         timestamp_to: cached_token.model.time_stamp_to,
         token_limit: Arc::clone(&cached_token.parsed_limits),
-        username: cached_token.model.username.clone(),
+        username: cached_token.model.username.as_deref().map(Arc::from),
     })
 }
 

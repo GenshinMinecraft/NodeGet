@@ -4,7 +4,7 @@
 //! - 管理用户通过 `db.create` RPC 创建的 `SQLite` 数据库连接池
 //! - 后台定时清理过期连接（基于 `max_lifetime_ms`）
 //! - 启动时从 `db_registry` 表种子恢复已有连接
-//! - 提供 SQL 执行结果转换工具（`row_to_json`、`json_to_sea_value`、`is_read_query`）
+//! - 提供 SQL 执行结果转换工具（`row_to_json`、`json_to_sea_value`）
 //!
 //! 协作关系：
 //! - `db` 命名空间 RPC 通过 `DbRegistryManager::global()` 访问连接池
@@ -54,6 +54,13 @@ pub struct DbRegistryManager {
     cancel_notify: Notify,
     /// 清理循环的 `JoinHandle`，`shutdown` 时用于等待退出
     cleanup_handle: Mutex<Option<JoinHandle<()>>>,
+    /// 连接创建/重命名操作序列锁（见 REVIEW L13）。
+    /// 由 `db.create` 与 `db.update` 调用方持有，覆盖 create_conn / rename + registry-update
+    /// 序列，防止并发 db.update 与 db.create 的 create_conn 交错导致 pool 缺条目或文件
+    /// 重命名竞态。用 tokio::sync::Mutex（非 std），因该锁需跨多个 await 持有。
+    /// 注意：锁在调用方持有而非 create_conn 内部，避免 db.update 持锁后调用 create_conn
+    /// 造成递归死锁。
+    conn_op_lock: tokio::sync::Mutex<()>,
 }
 
 /// 获取当前 UNIX 时间戳（毫秒），用于 `last_used_ms` 追踪
@@ -78,8 +85,8 @@ impl DbRegistryManager {
     ///
     /// # Panics
     ///
-    /// 若 `Mutex` 被 poison（仅当其他持有者在持锁期间 panic 时可能发生），或
-    /// `OnceLock` 内部 `expect` 失败时会 panic
+    /// 若 `OnceLock` 内部 `expect` 失败（如全局单例已被占用且非首次 init）时会 panic。
+    /// 内部 `Mutex` 即便被 poison 也通过 `into_inner` 恢复，不会 panic。
     #[allow(clippy::unused_async)]
     pub async fn init(db_path: String) -> Arc<Self> {
         static INIT: std::sync::Once = std::sync::Once::new();
@@ -90,6 +97,7 @@ impl DbRegistryManager {
                 cancelled: AtomicBool::new(false),
                 cancel_notify: Notify::new(),
                 cleanup_handle: Mutex::new(None),
+                conn_op_lock: tokio::sync::Mutex::new(()),
             });
             let mgr_clone = Arc::clone(&mgr_inner);
             let handle = tokio::spawn(async move {
@@ -98,7 +106,7 @@ impl DbRegistryManager {
                 }
                 mgr_clone.start_cleanup_loop().await;
             });
-            *mgr_inner.cleanup_handle.lock().unwrap() = Some(handle);
+            *mgr_inner.cleanup_handle.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(handle);
             let _ = MGR.set(mgr_inner);
         });
         Arc::clone(
@@ -110,6 +118,15 @@ impl DbRegistryManager {
     /// 获取全局单例引用，初始化前调用返回 `None`
     pub fn global() -> Option<&'static Arc<Self>> {
         MGR.get()
+    }
+
+    /// 获取连接创建/重命名操作序列锁（见 REVIEW L13）。
+    ///
+    /// `db.create` 与 `db.update` 调用方在 create_conn / rename + registry-update 序列期间
+    /// 持有该 guard，防止并发操作交错导致 pool 缺条目或文件重命名竞态。
+    /// guard 可跨 await 持有（tokio::sync::Mutex）。
+    pub async fn lock_conn_op(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        self.conn_op_lock.lock().await
     }
 
     /// 从主库 `db_registry` 表恢复已有连接到内存池
@@ -143,7 +160,9 @@ impl DbRegistryManager {
                     if conn.get_database_backend() == sea_orm::DatabaseBackend::Sqlite {
                         // auto_vacuum 必须在库为空（建库阶段）设置才生效，老库会被忽略。
                         // 新子库已在 create_conn 时设过；此处兜底，确保任何首次连接都尝试设一次。
-                        let _ = conn.execute_unprepared("PRAGMA auto_vacuum = INCREMENTAL;").await;
+                        let _ = conn
+                            .execute_unprepared("PRAGMA auto_vacuum = INCREMENTAL;")
+                            .await;
                         let _ = conn.execute_unprepared("PRAGMA journal_mode=WAL;").await;
                         let _ = conn.execute_unprepared("PRAGMA synchronous=NORMAL;").await;
                         let _ = conn.execute_unprepared("PRAGMA busy_timeout = 5000;").await;
@@ -293,16 +312,12 @@ impl DbRegistryManager {
     ///
     /// 内部步骤：
     /// 1. 构造 `SQLite` URL 并连接（自动启用 WAL 等优化）
-    /// 2. 若 `db_registry` 中无记录则插入新行，否则递增 `db_connections` 计数
+    /// 2. 同步 `db_registry` 表：无记录则插入新行，已有记录则按需更新 `max_lifetime_ms`
     /// 3. 将连接加入内存池并记录最后使用时间
     ///
     /// # Errors
     ///
     /// 当 `SQLite` 连接失败或 `db_registry` 表操作失败时返回错误
-    ///
-    /// # Panics
-    ///
-    /// 若 `existing` 在 `else` 分支中为 `None`（逻辑上不应发生）时会 panic
     pub async fn create_conn(
         &self,
         name: &str,
@@ -334,9 +349,7 @@ impl DbRegistryManager {
             .one(main_db)
             .await?;
         if let Some(existing_model) = existing {
-            let current_conns = existing_model.db_connections.unwrap_or(0).saturating_add(1);
             let mut active: dbreg_entity::ActiveModel = existing_model.into();
-            active.db_connections = Set(Some(current_conns));
             if max_lifetime_ms.is_some() {
                 active.max_lifetime_ms = Set(max_lifetime_ms);
             }
@@ -344,7 +357,6 @@ impl DbRegistryManager {
         } else {
             let active = dbreg_entity::ActiveModel {
                 name: Set(name.to_owned()),
-                db_connections: Set(Some(1)),
                 max_lifetime_ms: Set(max_lifetime_ms),
                 created_at: Set(now_ms),
                 ..Default::default()
@@ -442,7 +454,6 @@ impl DbRegistryManager {
                 id: e.id,
                 name: e.name.clone(),
                 file_path: self.get_db_path(&e.name),
-                db_connections: e.db_connections,
                 max_lifetime_ms: e.max_lifetime_ms,
                 created_at: e.created_at,
                 is_active: pools.contains_key(&e.name),
@@ -455,13 +466,15 @@ impl DbRegistryManager {
     /// - 设置 `cancelled` 标志并通过 `cancel_notify` 唤醒清理循环
     /// - 最多等待 5 秒，超时则输出警告
     ///
-    /// # Panics
-    ///
-    /// 若内部 Mutex 被 poison（仅当其他持有者在持锁期间 panic 时可能发生）则会 panic
+    /// 内部 `Mutex` 即便被 poison 也通过 `into_inner` 恢复，不会 panic。
     pub async fn shutdown(&self) {
         self.cancelled.store(true, Ordering::SeqCst);
         self.cancel_notify.notify_one();
-        let handle = self.cleanup_handle.lock().unwrap().take();
+        let handle = self
+            .cleanup_handle
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
         if let Some(handle) = handle {
             match tokio::time::timeout(std::time::Duration::from_secs(5), handle).await {
                 Ok(Ok(())) => info!(target: "db", "DbRegistry cleanup loop exited cleanly"),
@@ -485,8 +498,6 @@ pub struct DbInfo {
     pub name: String,
     /// `SQLite` 数据库文件绝对路径
     pub file_path: String,
-    /// 当前连接数引用计数，`None` 表示未跟踪
-    pub db_connections: Option<i32>,
     /// 连接最大生命周期（毫秒），`None` 表示永不过期
     pub max_lifetime_ms: Option<i64>,
     /// 创建时间，UNIX 时间戳（毫秒）
@@ -598,27 +609,4 @@ pub fn json_to_sea_value(json: &serde_json::Value) -> sea_orm::Value {
             sea_orm::Value::Json(Some(Box::new(json.clone())))
         }
     }
-}
-
-/// 判断 SQL 语句是否为只读查询
-///
-/// - `sql` — 待判定的 SQL 语句
-/// - 返回值：若为 SELECT / PRAGMA / EXPLAIN / WITH 开头则返回 true
-///
-/// 注意：仅检查语句开头，CTE 后接 DML 的情况仍返回 true（保守策略）
-#[must_use]
-pub fn is_read_query(sql: &str) -> bool {
-    let s = sql.trim_start_matches(|c: char| c.is_whitespace() || c == '(' || c == ';');
-    starts_with_ascii_ci(s, "SELECT")
-        || starts_with_ascii_ci(s, "PRAGMA")
-        || starts_with_ascii_ci(s, "EXPLAIN")
-        || starts_with_ascii_ci(s, "WITH")
-}
-
-/// ASCII 大小写不敏感的前缀匹配
-fn starts_with_ascii_ci(s: &str, prefix: &str) -> bool {
-    s.as_bytes()
-        .iter()
-        .zip(prefix.as_bytes())
-        .all(|(a, b)| a.to_ascii_uppercase() == *b)
 }

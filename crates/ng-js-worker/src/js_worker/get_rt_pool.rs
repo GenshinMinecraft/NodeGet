@@ -3,6 +3,7 @@
 use crate::js_worker::auth::check_get_rt_pool_permission;
 use jsonrpsee::core::RpcResult;
 use ng_core::error::NodegetError;
+use ng_infra::server::to_rpc_error;
 use ng_js_runtime::runtime_pool;
 use serde_json::value::RawValue;
 use tracing::debug;
@@ -28,13 +29,6 @@ pub async fn get_rt_pool(token: String) -> RpcResult<Box<RawValue>> {
 
     match process_logic.await {
         Ok(result) => Ok(result),
-        Err(e) => {
-            let nodeget_err = ng_core::error::anyhow_to_nodeget_error(&e);
-            Err(jsonrpsee::types::ErrorObject::owned(
-                nodeget_err.error_code() as i32,
-                format!("{nodeget_err}"),
-                None::<()>,
-            ))
-        }
+        Err(e) => Err(to_rpc_error(&e)),
     }
 }

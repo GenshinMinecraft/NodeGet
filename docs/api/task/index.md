@@ -296,7 +296,7 @@ pub struct DnsRecordResult {
     - **TXT**: 文本字符串
     - **CAA**: hickory Debug 格式输出（含 flags、tag、value 等完整信息）
 
-权限要求：`Dns`
+权限要求：`Task::Create("dns")`
 
 ---
 

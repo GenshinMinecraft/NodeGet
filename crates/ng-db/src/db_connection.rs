@@ -89,7 +89,9 @@ pub async fn init_db_connection(config: DbConnectionConfig) -> anyhow::Result<()
     // 故在 Migrator::up 建表之前抢先设置，确保新库建库即启用 INCREMENTAL。
     // 对已有数据的老库，此设置不生效（auto_vacuum 值保持 NONE），需用官方迁移教程转库。
     if db.get_database_backend() == sea_orm::DatabaseBackend::Sqlite {
-        let _ = db.execute_unprepared("PRAGMA auto_vacuum = INCREMENTAL;").await;
+        let _ = db
+            .execute_unprepared("PRAGMA auto_vacuum = INCREMENTAL;")
+            .await;
     }
 
     Migrator::up(&db, None).await.map_err(|e| {
@@ -132,47 +134,4 @@ pub async fn init_db_connection(config: DbConnectionConfig) -> anyhow::Result<()
 
     set_db(db);
     Ok(())
-}
-
-/// 为 `SQLite` URL 追加 `mode` 查询参数（`SQLx` 仅支持 `mode` 参数）。
-///
-/// 若 URL 中已包含 `mode=`，则不重复追加。
-/// 其他 `PRAGMA`（`journal_mode`、`synchronous` 等）不可作为 URL 参数，
-/// `SQLx` 驱动不支持，会报 `unknown query parameter` 错误。
-fn build_sqlite_url_with_mode(url: &str) -> String {
-    // 若已有 mode 参数则不追加
-    if url.contains("mode=") {
-        return url.to_owned();
-    }
-    let separator = if url.contains('?') { '&' } else { '?' };
-    format!("{url}{separator}mode=rwc")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn sqlite_url_no_existing_params() {
-        let result = build_sqlite_url_with_mode("sqlite://./data.db");
-        assert_eq!(result, "sqlite://./data.db?mode=rwc");
-    }
-
-    #[test]
-    fn sqlite_url_with_existing_mode() {
-        let result = build_sqlite_url_with_mode("sqlite://./data.db?mode=rwc");
-        assert_eq!(result, "sqlite://./data.db?mode=rwc");
-    }
-
-    #[test]
-    fn sqlite_url_with_existing_other_params() {
-        let result = build_sqlite_url_with_mode("sqlite://./data.db?timeout=3000");
-        assert_eq!(result, "sqlite://./data.db?timeout=3000&mode=rwc");
-    }
-
-    #[test]
-    fn sqlite_url_no_double_mode() {
-        let result = build_sqlite_url_with_mode("sqlite://nodeget.db?mode=ro");
-        assert_eq!(result, "sqlite://nodeget.db?mode=ro");
-    }
 }

@@ -3,8 +3,7 @@
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
     clippy::cast_possible_truncation,
-    clippy::similar_names,
-    dead_code
+    clippy::similar_names
 )]
 
 //! `ng-db` — `NodeGet` 数据库层
@@ -13,7 +12,7 @@
 //! - 通过 `SeaORM` 管理 13 张实体表（`entity` 模块）
 //! - 提供主库连接的全局单例（`get_db` / `set_db`），服务端启动时初始化
 //! - `DbRegistryManager` 管理用户创建的 `SQLite` 数据库池，含过期清理与自动种子恢复
-//! - SQL 辅助工具：`row_to_json`、`json_to_sea_value`、`is_read_query`
+//! - SQL 辅助工具：`row_to_json`、`json_to_sea_value`
 //! - 数据库名称校验：`validate_db_name`
 //!
 //! 协作关系：
@@ -33,7 +32,8 @@ pub mod entity;
 ///
 /// `PostgreSQL` 连接池的 `drop` 需要 join 后台维护任务，耗时可达数秒。
 /// 进程退出时 OS 回收所有资源（TCP 连接、内存），无需显式析构。
-/// 若后续需要优雅关闭池，可在 `serve.rs` 退出前调用 `take_and_close_db()`。
+/// `take_and_close_db()` 提供了显式析构的入口，但当前 `serve.rs` 退出流程未调用它
+/// （依赖 OS 回收）；保留该函数供未来需要优雅关闭池时启用。
 static DB: std::sync::OnceLock<std::mem::ManuallyDrop<sea_orm::DatabaseConnection>> =
     std::sync::OnceLock::new();
 
@@ -63,6 +63,7 @@ pub fn set_db(conn: sea_orm::DatabaseConnection) {
 /// # Safety
 ///
 /// 必须确保无其他代码仍在使用 `get_db()` 返回的引用。
+#[cfg(feature = "server")]
 #[allow(dead_code)]
 pub unsafe fn take_and_close_db() {
     // SAFETY: 调用者保证无其他引用在使用中
@@ -89,8 +90,6 @@ pub mod rpc;
 #[cfg(feature = "server")]
 pub use db_connection::{DbConnectionConfig, init_db_connection};
 #[cfg(feature = "server")]
-pub use db_registry::{
-    DbExecResult, DbInfo, DbRegistryManager, is_read_query, json_to_sea_value, row_to_json,
-};
+pub use db_registry::{DbExecResult, DbInfo, DbRegistryManager, json_to_sea_value, row_to_json};
 #[cfg(feature = "server")]
 pub use rpc::db::auth::validate_db_name;

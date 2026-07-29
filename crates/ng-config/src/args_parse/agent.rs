@@ -46,7 +46,6 @@ impl AgentArgs {
         }
 
         let args = Self::parse();
-        // todo: add check
         args
     }
 }

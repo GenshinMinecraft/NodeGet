@@ -8,9 +8,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 |-------------------|---------------------------------------------------------------------------|
 | `README.md`       | Project overview and entry point                                          |
 | `CLAUDE.md`       | Architecture, conventions, and workflow guide for Claude Code (this file) |
-| `CONTRIBUTING.md` | Contribution guidelines, code style, and module conventions               |
+| `CONTRIBUTING/`   | **Authoritative developer reference** — line-precise per-crate docs, architecture & data flow, convention enforcement handbook, cross-cutting mechanisms. Generated from a full source read. See `CONTRIBUTING/README.md`. Large changes MUST consult these docs first (see `.claude/contributing-enforcement.md`). |
 | `docs/`           | VitePress user and developer documentation                                |
 | `rp.md`           | 技术全解：comprehensive technical reference for Rust developers                |
+
+> **When `CLAUDE.md` and `CONTRIBUTING/` disagree, `CONTRIBUTING/` wins** — it is more precise and
+> closer to the source. `CLAUDE.md` is a high-density summary; `CONTRIBUTING/` is the expanded,
+> line-anchored reference. Large/refactoring changes must read the relevant `CONTRIBUTING/crates/<name>.md`
+> and `CONTRIBUTING/topics/*.md` before proceeding (enforced via `.claude/contributing-enforcement.md`).
 
 ## Build & Run
 
@@ -53,7 +58,7 @@ NodeGet/
 ├── crates/
 │   ├── ng-core/           # Errors, version, utils, NameValidator, Token/Scope/Permission/Limit/TokenOrAuth, PermissionChecker
 │   ├── ng-db/             # Entities (13 tables), DB connection global, DbRegistry, db RPC
-│   │   └── migration/     #   SeaORM migrations (19 steps)
+│   │   └── migration/     #   SeaORM migrations (22 steps)
 │   ├── ng-infra/          # DbBackedCache + make_global_cache!, rpc_exec!, RpcHelper, token_identity
 │   ├── ng-config/         # ServerConfig, AgentConfig, CLI args, global config, read/edit_config RPC
 │   ├── ng-monitoring/     # Monitoring data structures, caches (UUID/Last/StaticHash), buffer, agent/agent-uuid RPC
@@ -79,7 +84,9 @@ client. Custom jsonrpsee fork (`infinitefield/jsonrpsee`) uses `_` as namespace 
 file; agent receives `EditConfig` task then restarts runtime tasks.
 
 **Agent multi-server**: One agent connects to N servers simultaneously. Each server gets an independent
-`connection_manager` coroutine with exponential-backoff reconnect.
+`connection_manager` coroutine. Reconnect backoff is two-stage: the WebSocket handshake
+(`connect_with_retry`) uses exponential backoff (1s→2s→…→60s cap) with ±20% jitter; after an established
+connection drops, the main loop sleeps a fixed 3s before retrying.
 
 ### Data Flow
 
@@ -109,7 +116,7 @@ from 8 crates:
 | `static-bucket`      | ng-static              | Static bucket CRUD                                                                                                                               |
 | `static-bucket-file` | ng-static              | Static file operations                                                                                                                           |
 
-All RPC methods return `RpcResult<Box<RawValue>>` via the `rpc_exec!` macro for uniform logging.
+Most business RPC methods return `RpcResult<Box<RawValue>>` via the `rpc_exec!` macro for uniform logging; exceptions exist (subscriptions like `task.register_task` / `nodeget-server.stream_log`, plus a few token-less server methods such as `hello`/`version`/`uuid`).
 
 ### Caching Pattern
 
@@ -141,7 +148,8 @@ All implementations ultimately delegate to `ng_token` functions.
 QuickJS runtime pool (ng-js-runtime): each registered script gets its own OS thread + QuickJS instance. Communication
 via channels (`Execute`/`Shutdown`). Bytecode caching avoids recompilation. OS thread watchdog enforces hard timeout (
 kills CPU-bound loops). Built-in APIs (injected in `server_runtime.rs::init_js_runtime_globals`): `nodeget()` for
-internal RPC, `inlineCall()` for inline worker calls, `execSql()`, `getDatabaseType()`, `db.*` (create/read/update/
+internal RPC, `inlineCall()` for inline worker calls (max nesting depth **10**, enforced via
+`__nodeget_inline_depth` + JS/Rust dual check), `execSql()`, `getDatabaseType()`, `db.*` (create/read/update/
 remove/list/execSql), `fetch`, `randomUUID()`, `nodegetLog` (structured logging via `tracing` — **not** a browser/Node
 `console`, no format placeholders; added in c95743f), plus timer wrappers (`setTimeout`/`setInterval`/`setImmediate`).
 Web platform primitives come from `llrt_*` crates: `Buffer`/`Blob`/`atob`/`btoa`, `ReadableStream`/`WritableStream`/
@@ -177,6 +185,12 @@ Agent depends on `ng-core/for-agent`, `ng-config`, `ng-task`, `ng-monitoring` �
 Every RPC method authenticates via `TokenOrAuth` (key:secret token OR username|password). Tokens carry a `Vec<Limit>`
 specifying scope+permission constraints. Super-token (id=1, constant-time comparison) bypasses all limits. Token auth
 uses SHA256 with "NODEGET" salt.
+
+**`NodeGet::ExecSql` is intentionally a full-trust permission** — it runs arbitrary SQL on the main DB. On the SQLite
+backend, `ATTACH DATABASE 'any/path'` escalates this to arbitrary filesystem read/write under the server uid (creating/
+overwriting files, reading other `.db` files, bypassing the `db_registry` path constraints). This is a documented
+feature, not a bug; see `docs/api/nodeget/crud.md#权限要求`. Grant only to fully-trusted operators, run the server
+under a least-privilege uid.
 
 ## Key Conventions
 

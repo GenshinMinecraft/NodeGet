@@ -9,13 +9,13 @@ use sea_orm::DbBackend;
 use serde_json::value::RawValue;
 use tracing::warn;
 
-/// 查询主库数据库类型，需要 `NodeGet::ExecSql` 权限（复用该权限，Global 作用域）
+/// 查询主库数据库类型，需要 `NodeGet::GetDatabaseType` 权限（Global 作用域）
 ///
 /// - `token` — 认证 Token
 /// - 返回值：`{"success": true, "data": "sqlite"|"postgres"|"mysql"|"unknown"}`
 ///
 /// 内部步骤：
-/// 1. 解析 Token 并检查 `NodeGet::ExecSql` 权限
+/// 1. 解析 Token 并检查 `NodeGet::GetDatabaseType` 权限
 /// 2. 从全局单例获取主库连接
 /// 3. 根据 `get_database_backend()` 返回数据库类型字符串
 ///
@@ -39,14 +39,14 @@ pub async fn get_database_type(token: String) -> RpcResult<Box<RawValue>> {
             .check_token_limit(
                 &token_or_auth,
                 &[Scope::Global],
-                &[Permission::NodeGet(NodeGetPermission::ExecSql)],
+                &[Permission::NodeGet(NodeGetPermission::GetDatabaseType)],
             )
             .await?;
 
         if !is_allowed {
             warn!(target: "nodeget", token_key = tk, username = un, "get_database_type permission denied");
             return Err(NodegetError::PermissionDenied(
-                "Permission Denied: missing nodeget.exec_sql permission".to_owned(),
+                "Permission Denied: missing nodeget.get_database_type permission".to_owned(),
             )
             .into());
         }
