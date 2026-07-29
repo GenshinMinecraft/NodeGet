@@ -171,7 +171,7 @@
 
 ```json
 {
-  "token": "demo_super_token",
+  "father_token": "demo_super_token",
   // 父 Token，必须为 Super Token
   "token_creation": {
     // TokenCreationRequest 结构体
@@ -202,6 +202,7 @@ pub struct TokenCreationRequest {
     pub password: Option<String>,      // 可选，密码
     pub timestamp_from: Option<i64>,   // 可选，有效期起始，毫秒时间戳
     pub timestamp_to: Option<i64>,     // 可选，有效期结束，毫秒时间戳
+    pub version: Option<i32>,           // 可选，版本号；服务端固定存储为 1，客户端传入的值会被忽略
     pub token_limit: Vec<Limit>,       // 权限列表
 }
 ```
@@ -209,7 +210,7 @@ pub struct TokenCreationRequest {
 注意事项:
 
 - 虽然 Username+Password 是可选字段，但必须同时存在或同时不存在
-- 新建 Token 的 `version` 固定为 1，不可通过 `token_create` 指定
+- Version 固定为 1，`token_create` 会忽略客户端传入的 `version` 并始终存储为 1
 
 ### 权限要求
 
@@ -239,10 +240,11 @@ pub struct TokenCreationRequest {
   "jsonrpc": "2.0",
   "method": "token_create",
   "params": {
-    "token": "ROOT_KEY:ROOT_SECRET",
+    "father_token": "ROOT_KEY:ROOT_SECRET",
     "token_creation": {
       "username": "GM",
       "password": "ILoveRust1",
+      "version": 1,
       "token_limit": [
         {
           "scopes": [
